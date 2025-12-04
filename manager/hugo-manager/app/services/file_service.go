@@ -1,6 +1,7 @@
 package services
 
 import (
+	"encoding/base64"
 	"fmt"
 	"io"
 	"os"
@@ -136,6 +137,72 @@ func (s *FileService) ReadFile(projectID string, filePath string) (string, error
 	}
 
 	return string(content), nil
+}
+
+// ReadFileAsBase64 reads a file and returns it as a base64-encoded string
+func (s *FileService) ReadFileAsBase64(projectID string, filePath string) (string, error) {
+	// Get project
+	project, err := s.projectService.GetProject(projectID)
+	if err != nil {
+		return "", err
+	}
+
+	// Validate and resolve path
+	resolvedPath, err := s.resolvePath(project.Path, filePath)
+	if err != nil {
+		return "", err
+	}
+
+	// Check if file exists
+	if !utils.FileExists(resolvedPath) {
+		return "", models.NewAppError(
+			models.ErrFileNotFound,
+			fmt.Sprintf("File not found: %s", filePath),
+		)
+	}
+
+	// Check if it's a file (not directory)
+	if utils.IsDir(resolvedPath) {
+		return "", models.NewAppError(
+			models.ErrInvalidPath,
+			"Path is a directory, not a file",
+		)
+	}
+
+	// Read file
+	content, err := os.ReadFile(resolvedPath)
+	if err != nil {
+		return "", models.NewAppErrorWithDetails(
+			models.ErrFileAccessDenied,
+			"Failed to read file",
+			err.Error(),
+		)
+	}
+
+	// Encode to base64
+	base64Str := base64.StdEncoding.EncodeToString(content)
+	
+	// Determine MIME type from extension
+	ext := strings.ToLower(filepath.Ext(resolvedPath))
+	mimeType := "image/png" // default
+	switch ext {
+	case ".jpg", ".jpeg":
+		mimeType = "image/jpeg"
+	case ".png":
+		mimeType = "image/png"
+	case ".gif":
+		mimeType = "image/gif"
+	case ".svg":
+		mimeType = "image/svg+xml"
+	case ".webp":
+		mimeType = "image/webp"
+	case ".bmp":
+		mimeType = "image/bmp"
+	case ".ico":
+		mimeType = "image/x-icon"
+	}
+
+	return fmt.Sprintf("data:%s;base64,%s", mimeType, base64Str), nil
 }
 
 // WriteFile writes content to a file
@@ -499,5 +566,43 @@ func (s *FileService) copyDirectory(src, dst string) error {
 			return s.copySingleFile(path, dstPath)
 		}
 	})
+}
+
+// CopyFileFromExternal copies a file or directory from an external path into the project
+func (s *FileService) CopyFileFromExternal(projectID string, externalPath string, destinationPath string) error {
+	// Get project
+	project, err := s.projectService.GetProject(projectID)
+	if err != nil {
+		return err
+	}
+
+	// Validate external path exists
+	if !utils.FileExists(externalPath) {
+		return models.NewAppError(
+			models.ErrFileNotFound,
+			fmt.Sprintf("Source file not found: %s", externalPath),
+		)
+	}
+
+	// Resolve destination path within project
+	dstResolvedPath, err := s.resolvePath(project.Path, destinationPath)
+	if err != nil {
+		return err
+	}
+
+	// Check if destination already exists
+	if utils.FileExists(dstResolvedPath) {
+		return models.NewAppError(
+			models.ErrFileAccessDenied,
+			fmt.Sprintf("Destination already exists: %s", destinationPath),
+		)
+	}
+
+	// Copy file or directory
+	if utils.IsDir(externalPath) {
+		return s.copyDirectory(externalPath, dstResolvedPath)
+	} else {
+		return s.copySingleFile(externalPath, dstResolvedPath)
+	}
 }
 

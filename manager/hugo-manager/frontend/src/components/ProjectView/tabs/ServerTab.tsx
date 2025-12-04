@@ -133,7 +133,14 @@ export default function ServerTab({ project, onProjectUpdate }: ServerTabProps) 
     setError(null);
 
     try {
-      await StopServer(project.id);
+      // Add timeout to prevent UI from getting stuck
+      const stopPromise = StopServer(project.id);
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Stop operation timed out')), 5000)
+      );
+      
+      await Promise.race([stopPromise, timeoutPromise]);
+      
       setServerStatus(null);
       setServerLogs([]);
       
@@ -142,8 +149,18 @@ export default function ServerTab({ project, onProjectUpdate }: ServerTabProps) 
         onProjectUpdate();
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to stop server');
+      // Even if stop fails or times out, update UI to reflect stopped state
+      setServerStatus(null);
+      setServerLogs([]);
+      
+      const errorMessage = err.message || 'Failed to stop server';
+      setError(errorMessage);
       console.error('Stop error:', err);
+      
+      // Still refresh project status in case backend updated it
+      if (onProjectUpdate) {
+        onProjectUpdate();
+      }
     } finally {
       setIsLoading(false);
     }

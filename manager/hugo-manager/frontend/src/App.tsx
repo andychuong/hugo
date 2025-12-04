@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { AddProject, SelectDirectory, GetProject, OpenInFileExplorer, CreateNewProject, GetBuildStatus, RefreshProject } from '../wailsjs/go/handlers/App';
+import { useState, useEffect, lazy, Suspense } from 'react';
+import { AddProject, SelectDirectory, GetProject, OpenInFileExplorer, CreateNewProject, GetBuildStatus, RefreshProject, ScanDirectory } from '../wailsjs/go/handlers/App';
 import { models } from '../wailsjs/go/models';
 import ProjectList from './components/ProjectList/ProjectList';
 import ProjectView from './components/ProjectView/ProjectView';
@@ -9,7 +9,13 @@ import Button from './components/ui/Button';
 import Badge from './components/ui/Badge';
 import LoadingSpinner from './components/ui/LoadingSpinner';
 import ToastContainer from './components/ui/ToastContainer';
+import CommandPalette, { Command } from './components/ui/CommandPalette';
+import { useCommandPalette } from './hooks/useKeyboardShortcuts';
 import { useToast } from './hooks/useToast';
+
+// Lazy load heavy components
+const LazyProjectView = lazy(() => import('./components/ProjectView/ProjectView'));
+const LazyMultiSiteManager = lazy(() => import('./components/MultiSite/MultiSiteManager'));
 
 type Project = models.Project;
 
@@ -87,8 +93,12 @@ function App() {
   const [view, setView] = useState<View>('list');
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [showNewProjectDialog, setShowNewProjectDialog] = useState(false);
+  const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [projectListRefresh, setProjectListRefresh] = useState(0);
   const toast = useToast();
+
+  // Command palette
+  useCommandPalette(() => setShowCommandPalette(true), true);
 
   const handleProjectSelect = (project: Project) => {
     setSelectedProjectId(project.id);
@@ -127,6 +137,65 @@ function App() {
   const handleNewProjectCreated = () => {
     setProjectListRefresh(prev => prev + 1);
   };
+
+  // Command palette commands
+  const commands: Command[] = [
+    {
+      id: 'new-project',
+      label: 'Create New Project',
+      description: 'Create a new Hugo project',
+      category: 'Projects',
+      icon: '➕',
+      handler: () => setShowNewProjectDialog(true),
+      shortcut: 'Cmd+Shift+N',
+    },
+    {
+      id: 'add-project',
+      label: 'Add Existing Project',
+      description: 'Add an existing Hugo project',
+      category: 'Projects',
+      icon: '📁',
+      handler: handleAddProject,
+      shortcut: 'Cmd+Shift+A',
+    },
+    {
+      id: 'scan-directory',
+      label: 'Scan Directory',
+      description: 'Scan directory for Hugo projects',
+      category: 'Projects',
+      icon: '🔍',
+      handler: async () => {
+        try {
+          const path = await SelectDirectory('Select directory to scan for Hugo projects');
+          if (!path) return;
+          await ScanDirectory(path);
+          toast.success('Directory scanned successfully');
+          setProjectListRefresh(prev => prev + 1);
+        } catch (err: any) {
+          if (err.message && !err.message.includes('cancelled')) {
+            toast.error(err.message || 'Failed to scan directory');
+          }
+        }
+      },
+    },
+    {
+      id: 'multisite',
+      label: 'Multi-Site Operations',
+      description: 'Manage multiple projects',
+      category: 'Projects',
+      icon: '🌐',
+      handler: () => setView('multisite'),
+    },
+    {
+      id: 'go-home',
+      label: 'Go to Home',
+      description: 'Return to project list',
+      category: 'Navigation',
+      icon: '🏠',
+      handler: handleBackToList,
+      shortcut: 'Cmd+ArrowLeft',
+    },
+  ];
 
   return (
     <div className="h-screen bg-hugo-bg-primary text-hugo-text-primary flex flex-col overflow-hidden">
@@ -172,12 +241,16 @@ function App() {
                   ← Back to Projects
                 </Button>
               </div>
-              <MultiSiteManager />
+              <Suspense fallback={<LoadingSpinner size="lg" />}>
+                <LazyMultiSiteManager />
+              </Suspense>
             </div>
           </div>
         ) : selectedProjectId ? (
           <div className="h-full">
-            <ProjectView projectId={selectedProjectId} onBack={handleBackToList} />
+            <Suspense fallback={<LoadingSpinner size="lg" />}>
+              <LazyProjectView projectId={selectedProjectId} onBack={handleBackToList} />
+            </Suspense>
           </div>
         ) : null}
       </main>
@@ -190,6 +263,14 @@ function App() {
         <NewProjectDialog
           onClose={() => setShowNewProjectDialog(false)}
           onCreated={handleNewProjectCreated}
+        />
+      )}
+
+      {/* Command Palette */}
+      {showCommandPalette && (
+        <CommandPalette
+          commands={commands}
+          onClose={() => setShowCommandPalette(false)}
         />
       )}
     </div>

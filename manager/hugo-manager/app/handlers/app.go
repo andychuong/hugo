@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os/exec"
 	goruntime "runtime"
+	"strings"
 
 	"hugo-manager/app/models"
 	"hugo-manager/app/services"
@@ -54,7 +55,7 @@ func NewApp() *App {
 		fmt.Printf("Warning: Failed to initialize deployment service: %v\n", err)
 	}
 	
-	themeService, err := services.NewThemeService(projectService, hugoService)
+	themeService, err := services.NewThemeService(projectService, hugoService, configService)
 	if err != nil {
 		fmt.Printf("Warning: Failed to initialize theme service: %v\n", err)
 	}
@@ -290,6 +291,14 @@ func (a *App) ReadFile(projectID string, filePath string) (string, error) {
 	return a.fileService.ReadFile(projectID, filePath)
 }
 
+// ReadFileAsBase64 reads a file and returns it as a base64-encoded data URL
+func (a *App) ReadFileAsBase64(projectID string, filePath string) (string, error) {
+	if a.fileService == nil {
+		return "", models.NewAppError("SERVICE_ERROR", "File service not initialized")
+	}
+	return a.fileService.ReadFileAsBase64(projectID, filePath)
+}
+
 // WriteFile writes content to a file
 func (a *App) WriteFile(projectID string, filePath string, content string) error {
 	if a.fileService == nil {
@@ -336,6 +345,78 @@ func (a *App) CopyFile(projectID string, srcPath string, dstPath string) error {
 		return models.NewAppError("SERVICE_ERROR", "File service not initialized")
 	}
 	return a.fileService.CopyFile(projectID, srcPath, dstPath)
+}
+
+// OpenFileDialog opens a native file picker dialog
+func (a *App) OpenFileDialog(title string, filters string) (string, error) {
+	if a.ctx == nil {
+		return "", fmt.Errorf("context not initialized")
+	}
+
+	// Parse filters if provided (format: "Image Files|*.png,*.jpg,*.jpeg|All Files|*.*")
+	var dialogFilters []runtime.FileFilter
+	if filters != "" {
+		parts := strings.Split(filters, "|")
+		for i := 0; i < len(parts)-1; i += 2 {
+			if i+1 < len(parts) {
+				extensions := strings.Split(parts[i+1], ",")
+				dialogFilters = append(dialogFilters, runtime.FileFilter{
+					DisplayName: parts[i],
+					Pattern:     strings.Join(extensions, ";"),
+				})
+			}
+		}
+	}
+
+	selection, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
+		Title:   title,
+		Filters: dialogFilters,
+	})
+	if err != nil {
+		return "", err
+	}
+
+	return selection, nil
+}
+
+// OpenMultipleFilesDialog opens a native file picker dialog for multiple files
+func (a *App) OpenMultipleFilesDialog(title string, filters string) ([]string, error) {
+	if a.ctx == nil {
+		return nil, fmt.Errorf("context not initialized")
+	}
+
+	// Parse filters if provided
+	var dialogFilters []runtime.FileFilter
+	if filters != "" {
+		parts := strings.Split(filters, "|")
+		for i := 0; i < len(parts)-1; i += 2 {
+			if i+1 < len(parts) {
+				extensions := strings.Split(parts[i+1], ",")
+				dialogFilters = append(dialogFilters, runtime.FileFilter{
+					DisplayName: parts[i],
+					Pattern:     strings.Join(extensions, ";"),
+				})
+			}
+		}
+	}
+
+	selection, err := runtime.OpenMultipleFilesDialog(a.ctx, runtime.OpenDialogOptions{
+		Title:   title,
+		Filters: dialogFilters,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return selection, nil
+}
+
+// CopyFileFromExternal copies a file from an external path into the project
+func (a *App) CopyFileFromExternal(projectID string, externalPath string, destinationPath string) error {
+	if a.fileService == nil {
+		return models.NewAppError("SERVICE_ERROR", "File service not initialized")
+	}
+	return a.fileService.CopyFileFromExternal(projectID, externalPath, destinationPath)
 }
 
 // File Watcher Methods

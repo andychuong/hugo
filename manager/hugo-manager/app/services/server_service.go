@@ -324,41 +324,69 @@ func (s *ServerService) addLogLine(projectID string, line string) {
 // StopServer stops a running server
 func (s *ServerService) StopServer(projectID string) error {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	server, exists := s.servers[projectID]
 	if !exists || server == nil {
+		s.mu.Unlock()
 		return models.NewAppError(
 			models.ErrServerNotRunning,
 			"Server is not running for this project",
 		)
 	}
 
-	// Cancel context to stop command
-	if server.cancel != nil {
-		server.cancel()
-	}
-
-	// Kill process if still running
-	if server.cmd != nil && server.cmd.Process != nil {
-		server.cmd.Process.Kill()
-		server.cmd.Wait() // Wait for process to exit
-	}
-
-	// Remove from maps
-	delete(s.servers, projectID)
+	// Update status immediately so UI reflects the change
 	if status, exists := s.serverStatus[projectID]; exists {
 		status.mu.Lock()
 		status.IsRunning = false
 		status.mu.Unlock()
 	}
 
-	// Update project status
+	// Update project status immediately
 	project, err := s.projectService.GetProject(projectID)
 	if err == nil && project.Status != nil {
 		project.Status.IsServing = false
 		project.Status.ServerURL = ""
 		project.Status.ServerPort = 0
+	}
+
+	// Get references to cmd and cancel before unlocking
+	cmd := server.cmd
+	cancel := server.cancel
+
+	// Remove from maps immediately
+	delete(s.servers, projectID)
+	s.mu.Unlock()
+
+	// Cancel context to stop command
+	if cancel != nil {
+		cancel()
+	}
+
+	// Kill process if still running (do this outside the lock)
+	if cmd != nil && cmd.Process != nil {
+		// Try graceful shutdown first
+		cmd.Process.Signal(syscall.SIGTERM)
+		
+		// Wait for process to exit with timeout
+		done := make(chan error, 1)
+		go func() {
+			done <- cmd.Wait()
+		}()
+
+		select {
+		case <-done:
+			// Process exited normally
+		case <-time.After(2 * time.Second):
+			// Timeout - force kill
+			cmd.Process.Kill()
+			// Wait a bit more for kill to take effect
+			select {
+			case <-done:
+				// Process killed successfully
+			case <-time.After(1 * time.Second):
+				// Give up waiting - process might be stuck
+			}
+		}
 	}
 
 	return nil

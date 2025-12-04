@@ -131,4 +131,241 @@
   .badge-neutral {
     @apply bg-hugo-bg-tertiary text-hugo-text-tertiary border border-hugo-border-default;
   }
+
+  /* Wails drag and drop target styling */
+  .wails-drop-target {
+    @apply border-2 border-dashed border-hugo-accent-teal;
+    @apply bg-hugo-accent-teal/10;
+  }
+}
+
+/* Markdown Editor Styling */
+.w-md-editor {
+  background-color: #0d1117 !important;
+  border-color: #374151 !important;
+}
+
+.w-md-editor-content {
+  background-color: #0d1117 !important;
+}
+
+.w-md-editor-input {
+  background-color: #0d1117 !important;
+}
+
+.w-md-editor-text-pre,
+.w-md-editor-text-input {
+  background-color: #0d1117 !important;
+  color: #ffffff !important;
+  font-family: 'Mulish', 'Monaco', 'Menlo', 'Ubuntu Mono', monospace !important;
+}
+
+.w-md-editor-text-textarea {
+  background-color: #0d1117 !important;
+  color: #ffffff !important;
+}
+
+.w-md-editor-text {
+  background-color: #0d1117 !important;
+  color: #ffffff !important;
+}
+
+.w-md-editor-text textarea {
+  background-color: #0d1117 !important;
+  color: #ffffff !important;
+}
+
+.w-md-editor-text-input textarea {
+  background-color: #0d1117 !important;
+  color: #ffffff !important;
+}
+
+/* Ensure all text in the editor is visible - WHITE TEXT */
+.w-md-editor-text * {
+  color: #ffffff !important;
+}
+
+/* More specific selectors for CodeMirror (used by MDEditor) - WHITE TEXT */
+.w-md-editor-text .cm-editor,
+.w-md-editor-text .cm-scroller,
+.w-md-editor-text .cm-content,
+.w-md-editor-text .cm-line,
+.w-md-editor-text .cm-lineContent,
+.w-md-editor-text .cm-lineContent span {
+  color: #ffffff !important;
+  background-color: #0d1117 !important;
+}
+
+.w-md-editor-text .cm-focused {
+  outline: none !important;
+}
+
+.w-md-editor-text .cm-cursor {
+  border-left-color: #ffffff !important;
+}
+
+/* Override any inline styles - WHITE TEXT */
+.w-md-editor-text textarea[style],
+.w-md-editor-text-input textarea[style] {
+  color: #ffffff !important;
+  background-color: #0d1117 !important;
+}
+
+/* Force white text on all CodeMirror elements */
+.w-md-editor-text .cm-editor *,
+.w-md-editor-text .cm-content *,
+.w-md-editor-text .cm-line * {
+  color: #ffffff !important;
+}
+
+/* NUCLEAR OPTION - Force visibility with selection colors */
+.w-md-editor-text::selection,
+.w-md-editor-text *::selection {
+  background-color: #4a9eff !important;
+  color: #ffffff !important;
+}
+
+/* Ensure no overlay is covering the text */
+.w-md-editor-text {
+  position: relative !important;
+  z-index: 1 !important;
+}
+
+/* Force opacity to 1 */
+.w-md-editor-text,
+.w-md-editor-text *,
+.w-md-editor-text .cm-line,
+.w-md-editor-text .cm-content {
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+/* Remove any text-shadow or filters that might hide text */
+.w-md-editor-text,
+.w-md-editor-text * {
+  text-shadow: none !important;
+  filter: none !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+.w-md-editor-text-textarea::placeholder {
+  color: #6b7280 !important;
+}
+
+.w-md-editor-preview {
+  background-color: #0a0e1a !important;
+  color: #e5e7eb !important;
+}
+
+.w-md-editor-preview h1,
+.w-md-editor-preview h2,
+.w-md-editor-preview h3,
+.w-md-editor-preview h4,
+.w-md-editor-preview h5,
+.w-md-editor-preview h6 {
+  color: #ffffff !important;
+  font-weight: 500 !important;
+}
+
+.w-md-editor-preview p {
+  color: #d1d5db !important;
+}
+
+.w-md-editor-preview code {
+  background-color: #1e2937 !important;
+  color: #60a5fa !important;
+  padding: 2px 6px !important;
+  border-radius: 4px !important;
+}
+
+.w-md-editor-preview pre {
+  background-color: #1e2937 !important;
+  border: 1px solid #374151 !important;
+}
+
+.w-md-editor-preview pre code {
+  background-color: transparent !important;
+  color: #e5e7eb !important;
+}
+
+.w-md-editor-preview a {
+  color: #34d399 !important;
+}
+
+.w-md-editor-preview a:hover {
+  color: #6ee7b7 !important;
+}
+
+.w-md-editor-preview blockquote {
+  border-left: 4px solid #34d399 !important;
+  color: #9ca3af !important;
+  background-color: #1e2937 !important;
+}
+
+.w-md-editor-preview table {
+  border-color: #374151 !important;
+}
+
+.w-md-editor-preview table th {
+  background-color: #1e2937 !important;
+  color: #ffffff !important;
+  border-color: #374151 !important;
+}
+
+.w-md-editor-preview table td {
+  border-color: #374151 !important;
+  color: #d1d5db !important;
+}
+
+.w-md-editor-preview img {
+  display: block !important;
+  max-width: 100% !important;
+  height: auto !important;
+  border-radius: 4px !important;
+  margin: 1rem 0 !important;
+  border: 1px solid #374151 !important;
+}
+
+.w-md-editor-preview img[src^="/"] {
+  /* Handle absolute paths - these should work if server is running */
+}
+
+.w-md-editor-preview img[src^="./"],
+.w-md-editor-preview img[src^="../"] {
+  /* Handle relative paths - these might need special handling */
+}
+
+/* Fix broken image placeholders */
+.w-md-editor-preview img[alt]:not([src]),
+.w-md-editor-preview img:not([src]) {
+  display: none !important;
+}
+
+.w-md-editor-toolbar {
+  background-color: #0d1218 !important;
+  border-bottom: 1px solid #374151 !important;
+}
+
+.w-md-editor-toolbar button {
+  color: #9ca3af !important;
+}
+
+.w-md-editor-toolbar button:hover {
+  background-color: #1e2937 !important;
+  color: #ffffff !important;
+}
+
+.w-md-editor-toolbar button.active {
+  background-color: #1e2937 !important;
+  color: #34d399 !important;
+}
+
+.w-md-editor-divider {
+  background-color: #374151 !important;
+}
+
+/* Syntax highlighting in code blocks */
+.w-md-editor-preview pre[data-theme*=' '],
+.w-md-editor-preview pre[data-theme*=' '] code {
+  background-color: #1e2937 !important;
 }

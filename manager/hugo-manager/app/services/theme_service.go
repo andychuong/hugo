@@ -23,6 +23,7 @@ import (
 type ThemeService struct {
 	projectService *ProjectService
 	hugoService    *HugoService
+	configService  *ConfigService
 	indexCachePath string
 	indexCache     []*models.Theme
 	indexCacheTime time.Time
@@ -30,7 +31,7 @@ type ThemeService struct {
 }
 
 // NewThemeService creates a new theme service
-func NewThemeService(projectService *ProjectService, hugoService *HugoService) (*ThemeService, error) {
+func NewThemeService(projectService *ProjectService, hugoService *HugoService, configService *ConfigService) (*ThemeService, error) {
 	configDir, err := utils.GetConfigDir()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get config directory: %w", err)
@@ -41,6 +42,7 @@ func NewThemeService(projectService *ProjectService, hugoService *HugoService) (
 	return &ThemeService{
 		projectService: projectService,
 		hugoService:    hugoService,
+		configService:  configService,
 		indexCachePath: indexCachePath,
 		indexCache:     []*models.Theme{},
 	}, nil
@@ -876,8 +878,33 @@ func (s *ThemeService) InstallTheme(projectID string, themePath string) error {
 	}
 	
 	if !themeExists {
+		// Add theme to config
 		project.Config.Themes = append(project.Config.Themes, themePath)
-		// Save config would be handled by config service
+		
+		// Save config to file using config service
+		if s.configService != nil {
+			// Convert themes array to interface{} array for UpdateConfig
+			themes := make([]interface{}, len(project.Config.Themes))
+			for i, theme := range project.Config.Themes {
+				themes[i] = theme
+			}
+			
+			// Update config using UpdateConfig method
+			// Try "themes" first (array), then "theme" (single string)
+			if err := s.configService.UpdateConfig(projectID, []string{"themes"}, themes); err != nil {
+				// If "themes" key doesn't work, try "theme" as a single value
+				// For single theme, use the last theme in the list
+				if len(project.Config.Themes) == 1 {
+					if err := s.configService.UpdateConfig(projectID, []string{"theme"}, project.Config.Themes[0]); err != nil {
+						// Log error but don't fail installation - theme is already installed via hugo mod
+						fmt.Printf("Warning: Failed to save theme to config file: %v\n", err)
+					}
+				} else {
+					// Multiple themes - use "themes" array
+					fmt.Printf("Warning: Failed to save themes to config file: %v\n", err)
+				}
+			}
+		}
 	}
 	
 	return nil
@@ -941,7 +968,33 @@ func (s *ThemeService) InstallThemeSubmodule(projectID string, themeURL string, 
 	}
 	
 	if !themeExists {
+		// Add theme to config
 		project.Config.Themes = append(project.Config.Themes, themeName)
+		
+		// Save config to file using config service
+		if s.configService != nil {
+			// Convert themes array to interface{} array for UpdateConfig
+			themes := make([]interface{}, len(project.Config.Themes))
+			for i, theme := range project.Config.Themes {
+				themes[i] = theme
+			}
+			
+			// Update config using UpdateConfig method
+			// Try "themes" first (array), then "theme" (single string)
+			if err := s.configService.UpdateConfig(projectID, []string{"themes"}, themes); err != nil {
+				// If "themes" key doesn't work, try "theme" as a single value
+				// For single theme, use the last theme in the list
+				if len(project.Config.Themes) == 1 {
+					if err := s.configService.UpdateConfig(projectID, []string{"theme"}, project.Config.Themes[0]); err != nil {
+						// Log error but don't fail installation - theme is already installed via git submodule
+						fmt.Printf("Warning: Failed to save theme to config file: %v\n", err)
+					}
+				} else {
+					// Multiple themes - use "themes" array
+					fmt.Printf("Warning: Failed to save themes to config file: %v\n", err)
+				}
+			}
+		}
 	}
 	
 	return nil

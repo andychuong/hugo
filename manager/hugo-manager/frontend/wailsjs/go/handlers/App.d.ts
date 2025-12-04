@@ -15,6 +15,8 @@ export function ConvertConfigFormat(arg1:string,arg2:string):Promise<void>;
 
 export function CopyFile(arg1:string,arg2:string,arg3:string):Promise<void>;
 
+export function CopyFileFromExternal(arg1:string,arg2:string,arg3:string):Promise<void>;
+
 export function CreateContent(arg1:string,arg2:models.ContentOptions):Promise<models.Content>;
 
 export function CreateDeployment(arg1:string,arg2:string,arg3:Record<string, any>):Promise<models.Deployment>;
@@ -115,9 +117,15 @@ export function ListArchetypes(arg1:string):Promise<Array<models.Archetype>>;
 
 export function ListContent(arg1:string,arg2:string):Promise<models.ContentList>;
 
+export function OpenFileDialog(arg1:string,arg2:string):Promise<string>;
+
 export function OpenInFileExplorer(arg1:string):Promise<void>;
 
+export function OpenMultipleFilesDialog(arg1:string,arg2:string):Promise<Array<string>>;
+
 export function ReadFile(arg1:string,arg2:string):Promise<string>;
+
+export function ReadFileAsBase64(arg1:string,arg2:string):Promise<string>;
 
 export function RefreshProject(arg1:string):Promise<models.Project>;
 

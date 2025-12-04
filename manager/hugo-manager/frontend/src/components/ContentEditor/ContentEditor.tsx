@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import MDEditor from '@uiw/react-md-editor';
+import '@uiw/react-md-editor/markdown-editor.css';
 import { models } from '../../../wailsjs/go/models';
 import { 
   GetContent, 
@@ -6,6 +8,9 @@ import {
   DeleteContent 
 } from '../../../wailsjs/go/handlers/App';
 import { Content, ContentOptions } from '../../types';
+import { copyContentMarkdown } from '../../utils/copyMarkdown';
+import { useToast } from '../../hooks/useToast';
+import ToastContainer from '../ui/ToastContainer';
 
 type Project = models.Project;
 
@@ -27,6 +32,83 @@ export default function ContentEditor({ project, contentPath, onClose, onSaved }
   const [editFormat, setEditFormat] = useState('yaml');
   const [editIsDraft, setEditIsDraft] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [editorMode, setEditorMode] = useState<'edit' | 'preview' | 'live'>('live');
+  const toast = useToast();
+
+  // Get server URL for image resolution
+  const serverUrl = project.status?.isServing && project.status?.serverUrl 
+    ? project.status.serverUrl 
+    : null;
+
+  // Transform image paths in markdown preview to use server URL
+  useEffect(() => {
+    // Find all images in the preview and update their src
+    const updateImagePaths = () => {
+      const previewContainer = document.querySelector('.w-md-editor-preview');
+      if (!previewContainer) return;
+
+      const images = previewContainer.querySelectorAll('img');
+      images.forEach((img) => {
+        const src = img.getAttribute('src');
+        if (!src) return;
+
+        // Transform wails:// URLs to use server URL
+        if (src.startsWith('wails://')) {
+          const pathMatch = src.match(/wails:\/\/[^/]+(.+)/);
+          if (pathMatch && serverUrl) {
+            const cleanPath = pathMatch[1].startsWith('/') ? pathMatch[1].substring(1) : pathMatch[1];
+            img.setAttribute('src', `${serverUrl}/${cleanPath}`);
+            // Add error handler
+            img.onerror = () => {
+              img.style.display = 'none';
+            };
+            return;
+          }
+        }
+
+        // Skip if already has full URL or data URI
+        if (src.startsWith('http://') || src.startsWith('https://') || src.startsWith('data:')) {
+          return;
+        }
+
+        // Transform absolute paths (starting with /) or relative paths to use server URL
+        if (serverUrl) {
+          const cleanPath = src.startsWith('/') ? src.substring(1) : src;
+          const newSrc = `${serverUrl}/${cleanPath}`;
+          img.setAttribute('src', newSrc);
+        }
+        
+        // Add error handler to hide broken images
+        img.onerror = () => {
+          img.style.display = 'none';
+        };
+      });
+    };
+
+    // Use MutationObserver to watch for dynamically added images
+    const previewContainer = document.querySelector('.w-md-editor-preview');
+    if (!previewContainer) {
+      // Retry after a short delay if container doesn't exist yet
+      const timer = setTimeout(updateImagePaths, 100);
+      return () => clearTimeout(timer);
+    }
+
+    const observer = new MutationObserver(() => {
+      updateImagePaths();
+    });
+
+    observer.observe(previewContainer, {
+      childList: true,
+      subtree: true,
+    });
+
+    // Initial update
+    updateImagePaths();
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [editContent, serverUrl, editorMode]);
 
   // Load content when path changes
   useEffect(() => {
@@ -37,6 +119,18 @@ export default function ContentEditor({ project, contentPath, onClose, onSaved }
     }
   }, [contentPath, project.id]);
 
+  // Sync edit state when content changes and entering edit mode
+  useEffect(() => {
+    if (content && isEditing) {
+      const contentText = content.content || '';
+      setEditTitle(content.title || '');
+      setEditContent(contentText);
+      setEditFrontMatter({ ...content.frontMatter });
+      setEditFormat(content.format || 'yaml');
+      setEditIsDraft(content.isDraft || false);
+    }
+  }, [content, isEditing]);
+
   const loadContent = async () => {
     if (!contentPath) return;
     
@@ -45,8 +139,11 @@ export default function ContentEditor({ project, contentPath, onClose, onSaved }
     try {
       const data = await GetContent(project.id, contentPath);
       setContent(data);
+      // Always set edit content, even if not editing yet
+      // Don't trim - preserve whitespace in markdown
+      const contentText = String(data.content || '');
       setEditTitle(data.title || '');
-      setEditContent(data.content || '');
+      setEditContent(contentText);
       setEditFrontMatter(data.frontMatter || {});
       setEditFormat(data.format || 'yaml');
       setEditIsDraft(data.isDraft || false);
@@ -130,6 +227,17 @@ export default function ContentEditor({ project, contentPath, onClose, onSaved }
     }
   };
 
+  // Copy content markdown to clipboard
+  const handleCopyContentMarkdown = async () => {
+    if (!contentPath || !content) return;
+    try {
+      await copyContentMarkdown(contentPath, content.title || undefined);
+      toast.success('Content markdown copied to clipboard!');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to copy content markdown');
+    }
+  };
+
   if (!contentPath) {
     return (
       <div className="flex items-center justify-center h-full text-gray-400">
@@ -187,7 +295,26 @@ export default function ContentEditor({ project, contentPath, onClose, onSaved }
           ) : (
             <>
               <button
-                onClick={() => setIsEditing(true)}
+                onClick={handleCopyContentMarkdown}
+                className="px-3 py-1 bg-hugo-accent-teal hover:bg-hugo-accent-tealLight rounded text-sm flex items-center gap-2"
+                title="Copy markdown link"
+              >
+                <span>📋</span>
+                <span>Copy Markdown</span>
+              </button>
+              <button
+                onClick={() => {
+                  // Ensure edit state is synced with current content
+                  if (content) {
+                    const contentText = content.content || '';
+                    setEditTitle(content.title || '');
+                    setEditContent(contentText);
+                    setEditFrontMatter({ ...content.frontMatter });
+                    setEditFormat(content.format || 'yaml');
+                    setEditIsDraft(content.isDraft || false);
+                  }
+                  setIsEditing(true);
+                }}
                 className="px-3 py-1 bg-hugo-accent-teal hover:bg-hugo-accent-tealLight rounded text-sm"
               >
                 Edit
@@ -313,14 +440,53 @@ export default function ContentEditor({ project, contentPath, onClose, onSaved }
 
             {/* Content Editor */}
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">Content</label>
-              <textarea
-                value={editContent}
-                onChange={(e) => setEditContent(e.target.value)}
-                className="w-full h-64 px-3 py-2 bg-gray-800 border border-gray-700 rounded text-gray-100 font-mono text-sm focus:outline-none focus:border-blue-500"
-                placeholder="Content body (Markdown)"
-                spellCheck={false}
-              />
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-gray-300">Content (Markdown)</label>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setEditorMode('edit')}
+                    className={`px-2 py-1 text-xs rounded ${
+                      editorMode === 'edit'
+                        ? 'bg-hugo-accent-teal text-white'
+                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    }`}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => setEditorMode('preview')}
+                    className={`px-2 py-1 text-xs rounded ${
+                      editorMode === 'preview'
+                        ? 'bg-hugo-accent-teal text-white'
+                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    }`}
+                  >
+                    Preview
+                  </button>
+                  <button
+                    onClick={() => setEditorMode('live')}
+                    className={`px-2 py-1 text-xs rounded ${
+                      editorMode === 'live'
+                        ? 'bg-hugo-accent-teal text-white'
+                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    }`}
+                  >
+                    Both
+                  </button>
+                </div>
+              </div>
+              <div className="border border-gray-700 rounded overflow-hidden" data-color-mode="dark">
+                <MDEditor
+                  key={`editor-${contentPath}-${isEditing}`}
+                  value={editContent}
+                  onChange={(value) => setEditContent(value ?? '')}
+                  preview={editorMode}
+                  hideToolbar={false}
+                  visibleDragbar={true}
+                  height={400}
+                  data-color-mode="dark"
+                />
+              </div>
             </div>
           </div>
         ) : (
@@ -396,6 +562,9 @@ export default function ContentEditor({ project, contentPath, onClose, onSaved }
           </div>
         </div>
       )}
+
+      {/* Toast notifications */}
+      <ToastContainer toasts={toast.toasts} onRemove={toast.removeToast} />
     </div>
   );
 }

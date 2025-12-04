@@ -71,18 +71,38 @@ export default function ThemeBrowser({ project, onThemeInstalled }: ThemeBrowser
   };
 
   const handleInstall = async () => {
-    if (!selectedTheme) return;
+    if (!selectedTheme) {
+      console.error('No theme selected');
+      toast.error('No theme selected');
+      return;
+    }
+
+    if (!project || !project.id) {
+      console.error('No project selected');
+      toast.error('No project selected');
+      return;
+    }
     
     setInstalling(selectedTheme.id);
     try {
       if (installMethod === 'module') {
-        const themePath = installPath || selectedTheme.path;
+        const themePath = installPath.trim() || selectedTheme.path;
+        if (!themePath) {
+          throw new Error('Theme path is required');
+        }
+        console.log('Installing theme via module:', { projectId: project.id, themePath });
         await InstallTheme(project.id, themePath);
+        console.log('Theme installed successfully');
         toast.success(`Theme ${selectedTheme.name} installed successfully`);
       } else {
-        const themeURL = selectedTheme.githubPath || installPath;
+        const themeURL = installPath.trim() || selectedTheme.githubPath;
+        if (!themeURL) {
+          throw new Error('GitHub URL is required');
+        }
         const themeName = selectedTheme.name.toLowerCase().replace(/\s+/g, '-');
+        console.log('Installing theme via submodule:', { projectId: project.id, themeURL, themeName });
         await InstallThemeSubmodule(project.id, themeURL, themeName);
+        console.log('Theme installed successfully');
         toast.success(`Theme ${selectedTheme.name} installed successfully`);
       }
       setShowInstallDialog(false);
@@ -90,7 +110,9 @@ export default function ThemeBrowser({ project, onThemeInstalled }: ThemeBrowser
       setInstallPath('');
       onThemeInstalled?.();
     } catch (err: any) {
-      toast.error(err.message || 'Failed to install theme');
+      console.error('Theme installation error:', err);
+      const errorMessage = err?.message || err?.Message || err?.toString() || 'Failed to install theme';
+      toast.error(errorMessage);
     } finally {
       setInstalling(null);
     }

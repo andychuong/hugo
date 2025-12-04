@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
-import { GetProjects, ScanDirectory, SelectDirectory } from '../../../wailsjs/go/handlers/App';
+import { GetProjects, ScanDirectory, SelectDirectory, RemoveProject, OpenInFileExplorer } from '../../../wailsjs/go/handlers/App';
 import { models } from '../../../wailsjs/go/models';
 import ProjectCard from '../ProjectCard/ProjectCard';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 import LoadingSpinner from '../ui/LoadingSpinner';
 import EmptyState from '../ui/EmptyState';
+import ContextMenu, { useContextMenu, ContextMenuItem } from '../ui/ContextMenu';
+import VirtualList from '../ui/VirtualList';
 import { useToast } from '../../hooks/useToast';
 
 type Project = models.Project;
@@ -18,6 +20,7 @@ export default function ProjectList({ onProjectSelect }: ProjectListProps) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const { contextMenu, showContextMenu, hideContextMenu } = useContextMenu();
   const toast = useToast();
 
   const loadProjects = async () => {
@@ -63,6 +66,51 @@ export default function ProjectList({ onProjectSelect }: ProjectListProps) {
     project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     project.path.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const handleProjectContextMenu = (e: React.MouseEvent, project: Project) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const items: ContextMenuItem[] = [
+      {
+        id: 'open',
+        label: 'Open Project',
+        icon: '📂',
+        handler: () => onProjectSelect?.(project),
+      },
+      {
+        id: 'open-folder',
+        label: 'Open in File Explorer',
+        icon: '📁',
+        handler: async () => {
+          try {
+            await OpenInFileExplorer(project.path);
+          } catch (err: any) {
+            toast.error(err.message || 'Failed to open file explorer');
+          }
+        },
+      },
+      { id: 'divider-1', label: '', handler: () => {}, divider: true },
+      {
+        id: 'remove',
+        label: 'Remove Project',
+        icon: '🗑️',
+        handler: async () => {
+          if (confirm(`Are you sure you want to remove "${project.name}"?`)) {
+            try {
+              await RemoveProject(project.id);
+              toast.success('Project removed');
+              await loadProjects();
+            } catch (err: any) {
+              toast.error(err.message || 'Failed to remove project');
+            }
+          }
+        },
+      },
+    ];
+
+    showContextMenu(items, e.clientX, e.clientY);
+  };
 
   return (
     <div className="w-full">
@@ -124,16 +172,49 @@ export default function ProjectList({ onProjectSelect }: ProjectListProps) {
             } : undefined}
           />
         </div>
+      ) : filteredProjects.length > 50 ? (
+        // Use virtual scrolling for large lists
+        <VirtualList
+          items={filteredProjects}
+          itemHeight={200} // Approximate card height
+          containerHeight={600}
+          renderItem={(project) => (
+            <div className="p-2">
+              <div
+                onContextMenu={(e) => handleProjectContextMenu(e, project)}
+              >
+                <ProjectCard
+                  project={project}
+                  onClick={() => onProjectSelect?.(project)}
+                />
+              </div>
+            </div>
+          )}
+        />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredProjects.map((project) => (
-            <ProjectCard
+            <div
               key={project.id}
-              project={project}
-              onClick={() => onProjectSelect?.(project)}
-            />
+              onContextMenu={(e) => handleProjectContextMenu(e, project)}
+            >
+              <ProjectCard
+                project={project}
+                onClick={() => onProjectSelect?.(project)}
+              />
+            </div>
           ))}
         </div>
+      )}
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <ContextMenu
+          items={contextMenu.items}
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={hideContextMenu}
+        />
       )}
     </div>
   );

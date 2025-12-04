@@ -26,6 +26,10 @@ export function CopyFile(arg1, arg2, arg3) {
   return window['go']['handlers']['App']['CopyFile'](arg1, arg2, arg3);
 }
 
+export function CopyFileFromExternal(arg1, arg2, arg3) {
+  return window['go']['handlers']['App']['CopyFileFromExternal'](arg1, arg2, arg3);
+}
+
 export function CreateContent(arg1, arg2) {
   return window['go']['handlers']['App']['CreateContent'](arg1, arg2);
 }
@@ -226,12 +230,24 @@ export function ListContent(arg1, arg2) {
   return window['go']['handlers']['App']['ListContent'](arg1, arg2);
 }
 
+export function OpenFileDialog(arg1, arg2) {
+  return window['go']['handlers']['App']['OpenFileDialog'](arg1, arg2);
+}
+
 export function OpenInFileExplorer(arg1) {
   return window['go']['handlers']['App']['OpenInFileExplorer'](arg1);
 }
 
+export function OpenMultipleFilesDialog(arg1, arg2) {
+  return window['go']['handlers']['App']['OpenMultipleFilesDialog'](arg1, arg2);
+}
+
 export function ReadFile(arg1, arg2) {
   return window['go']['handlers']['App']['ReadFile'](arg1, arg2);
+}
+
+export function ReadFileAsBase64(arg1, arg2) {
+  return window['go']['handlers']['App']['ReadFileAsBase64'](arg1, arg2);
 }
 
 export function RefreshProject(arg1) {

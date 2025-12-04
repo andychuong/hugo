@@ -3,6 +3,9 @@ import { models } from '../../../wailsjs/go/models';
 import { ListContent } from '../../../wailsjs/go/handlers/App';
 import { ContentList as ContentListType, Content } from '../../types';
 import ContentEditor from '../ContentEditor/ContentEditor';
+import { copyContentMarkdown } from '../../utils/copyMarkdown';
+import { useToast } from '../../hooks/useToast';
+import ToastContainer from '../ui/ToastContainer';
 
 type Project = models.Project;
 
@@ -18,6 +21,7 @@ export default function ContentList({ project, refreshTrigger, onNewContent }: C
   const [error, setError] = useState<string | null>(null);
   const [selectedContent, setSelectedContent] = useState<string | null>(null);
   const [currentPath, setCurrentPath] = useState('content');
+  const toast = useToast();
 
   // Load content list
   const loadContent = useCallback(async (path: string = 'content') => {
@@ -49,6 +53,16 @@ export default function ContentList({ project, refreshTrigger, onNewContent }: C
 
   const handleCloseEditor = () => {
     setSelectedContent(null);
+  };
+
+  // Copy content markdown to clipboard
+  const handleCopyContentMarkdown = async (content: Content) => {
+    try {
+      await copyContentMarkdown(content.path, content.title || undefined);
+      toast.success('Content markdown copied to clipboard!');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to copy content markdown');
+    }
   };
 
   return (
@@ -93,13 +107,15 @@ export default function ContentList({ project, refreshTrigger, onNewContent }: C
               {contentList.items.map((content) => (
                 <div
                   key={content.id}
-                  onClick={() => handleContentSelect(content)}
-                  className={`p-3 rounded cursor-pointer hover:bg-gray-800 ${
+                  className={`group p-3 rounded cursor-pointer hover:bg-gray-800 ${
                     selectedContent === content.path ? 'bg-gray-800 border border-blue-500' : ''
                   }`}
                 >
                   <div className="flex items-start justify-between">
-                    <div className="flex-1 min-w-0">
+                    <div 
+                      className="flex-1 min-w-0"
+                      onClick={() => handleContentSelect(content)}
+                    >
                       <div className="text-sm font-medium text-gray-200 truncate">
                         {content.title || content.path}
                       </div>
@@ -117,6 +133,16 @@ export default function ContentList({ project, refreshTrigger, onNewContent }: C
                         </span>
                       </div>
                     </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleCopyContentMarkdown(content);
+                      }}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity px-2 py-1 bg-hugo-accent-teal hover:bg-hugo-accent-tealLight rounded text-xs text-white ml-2"
+                      title="Copy markdown link"
+                    >
+                      📋
+                    </button>
                   </div>
                 </div>
               ))}
@@ -144,6 +170,9 @@ export default function ContentList({ project, refreshTrigger, onNewContent }: C
           )}
         </div>
       </div>
+
+      {/* Toast notifications */}
+      <ToastContainer toasts={toast.toasts} onRemove={toast.removeToast} />
     </div>
   );
 }
