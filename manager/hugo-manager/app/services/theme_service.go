@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -844,28 +845,85 @@ func (s *ThemeService) GetThemeMetadata(themePath string) (*models.ThemeMetadata
 
 // InstallTheme installs a theme via Hugo Modules
 func (s *ThemeService) InstallTheme(projectID string, themePath string) error {
+	fmt.Printf("InstallTheme: Starting installation for project %s, theme path: %s\n", projectID, themePath)
+	
 	project, err := s.projectService.GetProject(projectID)
 	if err != nil {
-		return err
+		fmt.Printf("InstallTheme: Failed to get project: %v\n", err)
+		return fmt.Errorf("failed to get project: %w", err)
 	}
+	
+	fmt.Printf("InstallTheme: Project path: %s\n", project.Path)
 	
 	// Check if Hugo is installed
 	if !s.hugoService.IsInstalled() {
+		fmt.Printf("InstallTheme: Hugo is not installed\n")
 		return fmt.Errorf("Hugo is not installed")
 	}
 	
+	// Check if go.mod exists, if not initialize Hugo module
+	goModPath := filepath.Join(project.Path, "go.mod")
+	if _, err := os.Stat(goModPath); os.IsNotExist(err) {
+		fmt.Printf("InstallTheme: go.mod not found, initializing Hugo module\n")
+		// Try to guess module path from project name or use a default
+		modulePath := fmt.Sprintf("hugo-project-%s", projectID)
+		if project.Name != "" {
+			// Use project name as part of module path (sanitize it)
+			sanitizedName := strings.ToLower(strings.ReplaceAll(project.Name, " ", "-"))
+			modulePath = fmt.Sprintf("hugo-%s", sanitizedName)
+		}
+		
+		fmt.Printf("InstallTheme: Running 'hugo mod init %s' in directory: %s\n", modulePath, project.Path)
+		// Add timeout for init command (should be very fast)
+		initCtx, initCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer initCancel()
+		
+		initCmd := exec.CommandContext(initCtx, "hugo", "mod", "init", modulePath)
+		initCmd.Dir = project.Path
+		
+		initOutput, initErr := initCmd.CombinedOutput()
+		if initErr != nil {
+			if initCtx.Err() == context.DeadlineExceeded {
+				fmt.Printf("InstallTheme: Init command timed out after 10 seconds\n")
+				return fmt.Errorf("initializing Hugo module timed out - this should only take a few seconds")
+			}
+			fmt.Printf("InstallTheme: Failed to initialize module: %v\n", initErr)
+			fmt.Printf("InstallTheme: Init command output: %s\n", string(initOutput))
+			return fmt.Errorf("failed to initialize Hugo module: %v\n%s", initErr, string(initOutput))
+		}
+		fmt.Printf("InstallTheme: Module initialized successfully. Output: %s\n", string(initOutput))
+	} else {
+		fmt.Printf("InstallTheme: go.mod already exists\n")
+	}
+	
+	fmt.Printf("InstallTheme: Running 'hugo mod get %s' in directory: %s\n", themePath, project.Path)
+	
+	// Add timeout for mod get command (2 minutes should be plenty for downloading)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	
 	// Run: hugo mod get <themePath>
-	cmd := exec.Command("hugo", "mod", "get", themePath)
+	cmd := exec.CommandContext(ctx, "hugo", "mod", "get", themePath)
 	cmd.Dir = project.Path
 	
 	output, err := cmd.CombinedOutput()
 	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			fmt.Printf("InstallTheme: Command timed out after 2 minutes\n")
+			return fmt.Errorf("installation timed out after 2 minutes - this may indicate a network issue")
+		}
+		fmt.Printf("InstallTheme: Command failed with error: %v\n", err)
+		fmt.Printf("InstallTheme: Command output: %s\n", string(output))
 		return fmt.Errorf("failed to install theme: %v\n%s", err, string(output))
 	}
 	
+	fmt.Printf("InstallTheme: Command succeeded. Output: %s\n", string(output))
+	
 	// Update project config to include theme
+	fmt.Printf("InstallTheme: Updating project config\n")
 	if project.Config == nil {
 		project.Config = &models.Config{}
+		fmt.Printf("InstallTheme: Initialized new config\n")
 	}
 	
 	// Check if theme is already in the list
@@ -873,11 +931,13 @@ func (s *ThemeService) InstallTheme(projectID string, themePath string) error {
 	for _, existingTheme := range project.Config.Themes {
 		if existingTheme == themePath {
 			themeExists = true
+			fmt.Printf("InstallTheme: Theme already exists in config\n")
 			break
 		}
 	}
 	
 	if !themeExists {
+		fmt.Printf("InstallTheme: Adding theme to config\n")
 		// Add theme to config
 		project.Config.Themes = append(project.Config.Themes, themePath)
 		
@@ -889,41 +949,58 @@ func (s *ThemeService) InstallTheme(projectID string, themePath string) error {
 				themes[i] = theme
 			}
 			
+			fmt.Printf("InstallTheme: Saving config with %d theme(s)\n", len(project.Config.Themes))
 			// Update config using UpdateConfig method
 			// Try "themes" first (array), then "theme" (single string)
 			if err := s.configService.UpdateConfig(projectID, []string{"themes"}, themes); err != nil {
+				fmt.Printf("InstallTheme: Failed to update config with 'themes' key: %v\n", err)
 				// If "themes" key doesn't work, try "theme" as a single value
 				// For single theme, use the last theme in the list
 				if len(project.Config.Themes) == 1 {
 					if err := s.configService.UpdateConfig(projectID, []string{"theme"}, project.Config.Themes[0]); err != nil {
 						// Log error but don't fail installation - theme is already installed via hugo mod
 						fmt.Printf("Warning: Failed to save theme to config file: %v\n", err)
+					} else {
+						fmt.Printf("InstallTheme: Successfully saved theme to config using 'theme' key\n")
 					}
 				} else {
 					// Multiple themes - use "themes" array
 					fmt.Printf("Warning: Failed to save themes to config file: %v\n", err)
 				}
+			} else {
+				fmt.Printf("InstallTheme: Successfully saved themes to config\n")
 			}
+		} else {
+			fmt.Printf("InstallTheme: Warning - configService is nil, cannot save config\n")
 		}
 	}
 	
+	fmt.Printf("InstallTheme: Installation completed successfully\n")
 	return nil
 }
 
 // InstallThemeSubmodule installs a theme via Git submodule (legacy)
 func (s *ThemeService) InstallThemeSubmodule(projectID string, themeURL string, themeName string) error {
+	fmt.Printf("InstallThemeSubmodule: Starting installation for project %s, theme URL: %s, theme name: %s\n", projectID, themeURL, themeName)
+	
 	project, err := s.projectService.GetProject(projectID)
 	if err != nil {
-		return err
+		fmt.Printf("InstallThemeSubmodule: Failed to get project: %v\n", err)
+		return fmt.Errorf("failed to get project: %w", err)
 	}
+	
+	fmt.Printf("InstallThemeSubmodule: Project path: %s\n", project.Path)
 	
 	// Check if git is installed
 	if _, err := exec.LookPath("git"); err != nil {
+		fmt.Printf("InstallThemeSubmodule: Git is not installed\n")
 		return fmt.Errorf("Git is not installed")
 	}
 	
 	themesDir := filepath.Join(project.Path, "themes")
+	fmt.Printf("InstallThemeSubmodule: Creating themes directory: %s\n", themesDir)
 	if err := os.MkdirAll(themesDir, 0755); err != nil {
+		fmt.Printf("InstallThemeSubmodule: Failed to create themes directory: %v\n", err)
 		return fmt.Errorf("failed to create themes directory: %w", err)
 	}
 	
@@ -931,31 +1008,42 @@ func (s *ThemeService) InstallThemeSubmodule(projectID string, themeURL string, 
 	
 	// Check if theme already exists
 	if _, err := os.Stat(themePath); err == nil {
+		fmt.Printf("InstallThemeSubmodule: Theme already exists at: %s\n", themePath)
 		return fmt.Errorf("theme %s already exists", themeName)
 	}
 	
 	// Initialize git repo if needed
 	gitPath := filepath.Join(project.Path, ".git")
 	if _, err := os.Stat(gitPath); os.IsNotExist(err) {
+		fmt.Printf("InstallThemeSubmodule: Initializing git repository\n")
 		cmd := exec.Command("git", "init")
 		cmd.Dir = project.Path
 		if err := cmd.Run(); err != nil {
+			fmt.Printf("InstallThemeSubmodule: Failed to initialize git: %v\n", err)
 			return fmt.Errorf("failed to initialize git: %v", err)
 		}
 	}
 	
 	// Add submodule
-	cmd := exec.Command("git", "submodule", "add", themeURL, filepath.Join("themes", themeName))
+	submodulePath := filepath.Join("themes", themeName)
+	fmt.Printf("InstallThemeSubmodule: Adding submodule: %s -> %s\n", themeURL, submodulePath)
+	cmd := exec.Command("git", "submodule", "add", themeURL, submodulePath)
 	cmd.Dir = project.Path
 	
 	output, err := cmd.CombinedOutput()
 	if err != nil {
+		fmt.Printf("InstallThemeSubmodule: Command failed with error: %v\n", err)
+		fmt.Printf("InstallThemeSubmodule: Command output: %s\n", string(output))
 		return fmt.Errorf("failed to add submodule: %v\n%s", err, string(output))
 	}
 	
+	fmt.Printf("InstallThemeSubmodule: Command succeeded. Output: %s\n", string(output))
+	
 	// Update project config
+	fmt.Printf("InstallThemeSubmodule: Updating project config\n")
 	if project.Config == nil {
 		project.Config = &models.Config{}
+		fmt.Printf("InstallThemeSubmodule: Initialized new config\n")
 	}
 	
 	// Check if theme is already in the list
@@ -963,11 +1051,13 @@ func (s *ThemeService) InstallThemeSubmodule(projectID string, themeURL string, 
 	for _, existingTheme := range project.Config.Themes {
 		if existingTheme == themeName {
 			themeExists = true
+			fmt.Printf("InstallThemeSubmodule: Theme already exists in config\n")
 			break
 		}
 	}
 	
 	if !themeExists {
+		fmt.Printf("InstallThemeSubmodule: Adding theme to config\n")
 		// Add theme to config
 		project.Config.Themes = append(project.Config.Themes, themeName)
 		
@@ -979,24 +1069,33 @@ func (s *ThemeService) InstallThemeSubmodule(projectID string, themeURL string, 
 				themes[i] = theme
 			}
 			
+			fmt.Printf("InstallThemeSubmodule: Saving config with %d theme(s)\n", len(project.Config.Themes))
 			// Update config using UpdateConfig method
 			// Try "themes" first (array), then "theme" (single string)
 			if err := s.configService.UpdateConfig(projectID, []string{"themes"}, themes); err != nil {
+				fmt.Printf("InstallThemeSubmodule: Failed to update config with 'themes' key: %v\n", err)
 				// If "themes" key doesn't work, try "theme" as a single value
 				// For single theme, use the last theme in the list
 				if len(project.Config.Themes) == 1 {
 					if err := s.configService.UpdateConfig(projectID, []string{"theme"}, project.Config.Themes[0]); err != nil {
 						// Log error but don't fail installation - theme is already installed via git submodule
 						fmt.Printf("Warning: Failed to save theme to config file: %v\n", err)
+					} else {
+						fmt.Printf("InstallThemeSubmodule: Successfully saved theme to config using 'theme' key\n")
 					}
 				} else {
 					// Multiple themes - use "themes" array
 					fmt.Printf("Warning: Failed to save themes to config file: %v\n", err)
 				}
+			} else {
+				fmt.Printf("InstallThemeSubmodule: Successfully saved themes to config\n")
 			}
+		} else {
+			fmt.Printf("InstallThemeSubmodule: Warning - configService is nil, cannot save config\n")
 		}
 	}
 	
+	fmt.Printf("InstallThemeSubmodule: Installation completed successfully\n")
 	return nil
 }
 

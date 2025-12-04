@@ -104,3 +104,4 @@ export const Shortcuts = {
   SEARCH_FILES: { key: 'p', meta: true },
 };
 
+

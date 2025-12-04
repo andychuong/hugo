@@ -83,6 +83,13 @@ export default function ThemeBrowser({ project, onThemeInstalled }: ThemeBrowser
       return;
     }
     
+    console.log('Starting installation...', {
+      theme: selectedTheme.name,
+      method: installMethod,
+      projectId: project.id,
+      installPath: installPath.trim() || (installMethod === 'module' ? selectedTheme.path : selectedTheme.githubPath)
+    });
+    
     setInstalling(selectedTheme.id);
     try {
       if (installMethod === 'module') {
@@ -91,6 +98,7 @@ export default function ThemeBrowser({ project, onThemeInstalled }: ThemeBrowser
           throw new Error('Theme path is required');
         }
         console.log('Installing theme via module:', { projectId: project.id, themePath });
+        toast.info(`Installing ${selectedTheme.name} via Hugo Modules...`);
         await InstallTheme(project.id, themePath);
         console.log('Theme installed successfully');
         toast.success(`Theme ${selectedTheme.name} installed successfully`);
@@ -101,6 +109,7 @@ export default function ThemeBrowser({ project, onThemeInstalled }: ThemeBrowser
         }
         const themeName = selectedTheme.name.toLowerCase().replace(/\s+/g, '-');
         console.log('Installing theme via submodule:', { projectId: project.id, themeURL, themeName });
+        toast.info(`Installing ${selectedTheme.name} via Git Submodule...`);
         await InstallThemeSubmodule(project.id, themeURL, themeName);
         console.log('Theme installed successfully');
         toast.success(`Theme ${selectedTheme.name} installed successfully`);
@@ -111,8 +120,42 @@ export default function ThemeBrowser({ project, onThemeInstalled }: ThemeBrowser
       onThemeInstalled?.();
     } catch (err: any) {
       console.error('Theme installation error:', err);
-      const errorMessage = err?.message || err?.Message || err?.toString() || 'Failed to install theme';
-      toast.error(errorMessage);
+      console.error('Error details:', {
+        message: err?.message,
+        Message: err?.Message,
+        code: err?.code,
+        stack: err?.stack,
+        toString: err?.toString(),
+        fullError: err
+      });
+      
+      // Extract error message from various possible formats
+      let errorMessage = 'Failed to install theme';
+      if (err) {
+        if (typeof err === 'string') {
+          errorMessage = err;
+        } else if (err.message) {
+          errorMessage = err.message;
+        } else if (err.Message) {
+          errorMessage = err.Message;
+        } else if (err.toString && typeof err.toString === 'function') {
+          const errStr = err.toString();
+          // If toString returns something meaningful (not just "[object Object]")
+          if (errStr && !errStr.startsWith('[object')) {
+            errorMessage = errStr;
+          }
+        }
+      }
+      
+      // Clean up error message - remove newlines and extra whitespace
+      errorMessage = errorMessage.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
+      
+      // Truncate very long error messages
+      if (errorMessage.length > 200) {
+        errorMessage = errorMessage.substring(0, 200) + '...';
+      }
+      
+      toast.error(`Installation failed: ${errorMessage}`);
     } finally {
       setInstalling(null);
     }
@@ -266,7 +309,20 @@ export default function ThemeBrowser({ project, onThemeInstalled }: ThemeBrowser
       {/* Install Dialog */}
       {showInstallDialog && selectedTheme && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <Card className="w-full max-w-md p-6">
+          <Card className="w-full max-w-md p-6 relative">
+            {installing === selectedTheme.id && (
+              <div className="absolute inset-0 bg-hugo-bg-primary/80 backdrop-blur-sm rounded-lg flex items-center justify-center z-10">
+                <div className="flex flex-col items-center gap-3">
+                  <LoadingSpinner size="lg" />
+                  <p className="text-sm text-hugo-text-secondary">
+                    Installing {selectedTheme.name}...
+                  </p>
+                  <p className="text-xs text-hugo-text-tertiary">
+                    This may take a moment
+                  </p>
+                </div>
+              </div>
+            )}
             <h3 className="text-xl font-bold text-hugo-text-primary mb-4">
               Install {selectedTheme.name}
             </h3>
@@ -277,9 +333,10 @@ export default function ThemeBrowser({ project, onThemeInstalled }: ThemeBrowser
                   Installation Method
                 </label>
                 <select
-                  className="w-full px-3 py-2 bg-hugo-bg-secondary border border-hugo-border-default rounded text-hugo-text-primary"
+                  className="w-full px-3 py-2 bg-hugo-bg-secondary border border-hugo-border-default rounded text-hugo-text-primary disabled:opacity-50 disabled:cursor-not-allowed"
                   value={installMethod}
                   onChange={(e) => setInstallMethod(e.target.value as 'module' | 'submodule')}
+                  disabled={installing === selectedTheme.id}
                 >
                   <option value="module">Hugo Modules (Recommended)</option>
                   <option value="submodule">Git Submodule (Legacy)</option>
@@ -293,6 +350,7 @@ export default function ThemeBrowser({ project, onThemeInstalled }: ThemeBrowser
                   onChange={(e) => setInstallPath(e.target.value)}
                   placeholder="e.g., github.com/user/theme"
                   helperText="Leave empty to use default theme path"
+                  disabled={installing === selectedTheme.id}
                 />
               ) : (
                 <Input
@@ -300,23 +358,30 @@ export default function ThemeBrowser({ project, onThemeInstalled }: ThemeBrowser
                   value={installPath || selectedTheme.githubPath}
                   onChange={(e) => setInstallPath(e.target.value)}
                   placeholder="https://github.com/user/theme.git"
+                  disabled={installing === selectedTheme.id}
                 />
               )}
 
               <div className="flex gap-2 justify-end pt-4">
                 <Button
                   onClick={() => {
+                    if (installing === selectedTheme.id) {
+                      // Don't allow closing during installation
+                      return;
+                    }
                     setShowInstallDialog(false);
                     setSelectedTheme(null);
                     setInstallPath('');
                   }}
                   variant="secondary"
+                  disabled={installing === selectedTheme.id}
                 >
                   Cancel
                 </Button>
                 <Button
                   onClick={handleInstall}
                   variant="primary"
+                  isLoading={installing === selectedTheme.id}
                   disabled={installing === selectedTheme.id}
                 >
                   {installing === selectedTheme.id ? 'Installing...' : 'Install'}
