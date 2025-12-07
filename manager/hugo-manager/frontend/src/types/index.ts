@@ -152,3 +152,85 @@ export interface Archetype {
   content: string;
 }
 
+// GitHub Integration Types
+
+export interface GitHubRepository {
+  id: number;
+  name: string;
+  fullName: string;
+  description: string;
+  url: string;
+  cloneUrl: string;
+  sshUrl: string;
+  defaultBranch: string;
+  isPrivate: boolean;
+  isFork: boolean;
+  stars: number;
+  forks: number;
+  language: string;
+  topics: string[];
+  createdAt: string;
+  updatedAt: string;
+  pushedAt: string;
+  isHugoProject?: boolean;
+  hugoInfo?: HugoProjectInfo;
+}
+
+export interface HugoProjectInfo {
+  isHugoProject: boolean;
+  confidence: number; // 0-100
+  configFiles: string[];
+  hasContentDir: boolean;
+  hasThemesDir: boolean;
+  hasArchetypes: boolean;
+  hasLayouts: boolean;
+  reasons: string[];
+}
+
+export interface GitStatus {
+  modifiedFiles: string[];
+  stagedFiles: string[];
+  untrackedFiles: string[];
+  currentBranch: string;
+  hasChanges: boolean;
+  isClean: boolean;
+  commitsAhead: number;
+  commitsBehind: number;
+}
+
+export interface GitConfig {
+  userName: string;
+  userEmail: string;
+  remoteUrl: string;
+  credentialHelper: string;
+  isGitRepo: boolean;
+}
+
+export interface GitCommit {
+  hash: string;
+  shortHash: string;
+  message: string;
+  author: string;
+  email: string;
+  date: string;
+  branch?: string;
+}
+
+export interface GitBranch {
+  name: string;
+  isRemote: boolean;
+  isCurrent: boolean;
+  commit?: string;
+}
+
+export interface GitHubUser {
+  login: string;
+  name: string;
+  email: string;
+  avatarUrl: string;
+  bio: string;
+  company: string;
+  location: string;
+  blog: string;
+}
+

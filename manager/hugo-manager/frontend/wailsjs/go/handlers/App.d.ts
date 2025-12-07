@@ -9,7 +9,13 @@ export function BuildProject(arg1:string,arg2:models.BuildOptions):Promise<model
 
 export function CancelBuild(arg1:string):Promise<void>;
 
+export function CheckIfHugoProject(arg1:string,arg2:string):Promise<models.HugoProjectInfo>;
+
+export function CloneGitHubRepository(arg1:string,arg2:string):Promise<void>;
+
 export function CloneProject(arg1:string,arg2:models.CloneOptions):Promise<models.Project>;
+
+export function CommitChanges(arg1:string,arg2:string):Promise<void>;
 
 export function ConvertConfigFormat(arg1:string,arg2:string):Promise<void>;
 
@@ -24,6 +30,8 @@ export function CreateDeployment(arg1:string,arg2:string,arg3:Record<string, any
 export function CreateDirectory(arg1:string,arg2:string):Promise<void>;
 
 export function CreateFile(arg1:string,arg2:string,arg3:string):Promise<void>;
+
+export function CreateGitHubRepository(arg1:string,arg2:string,arg3:boolean):Promise<models.GitHubRepository>;
 
 export function CreateNewProject(arg1:string,arg2:string):Promise<models.Project>;
 
@@ -53,6 +61,8 @@ export function GetArchetype(arg1:string,arg2:string):Promise<models.Archetype>;
 
 export function GetAvailableEnvironments(arg1:string):Promise<Array<string>>;
 
+export function GetBranches(arg1:string):Promise<Array<models.GitBranch>>;
+
 export function GetBuildHistory(arg1:string,arg2:number):Promise<Array<models.Build>>;
 
 export function GetBuildLogs(arg1:string,arg2:number):Promise<Array<string>>;
@@ -60,6 +70,8 @@ export function GetBuildLogs(arg1:string,arg2:number):Promise<Array<string>>;
 export function GetBuildStatus(arg1:string):Promise<services.BuildStatusResponse>;
 
 export function GetBulkOperation(arg1:string):Promise<models.BulkOperation>;
+
+export function GetCommitHistory(arg1:string,arg2:number):Promise<Array<models.GitCommit>>;
 
 export function GetConfig(arg1:string,arg2:string):Promise<Record<string, any>>;
 
@@ -74,6 +86,14 @@ export function GetDeploymentHistory(arg1:string,arg2:number):Promise<Array<mode
 export function GetDeploymentsForProject(arg1:string):Promise<Array<models.Deployment>>;
 
 export function GetEditableRegions(arg1:string,arg2:string):Promise<Array<models.EditableRegion>>;
+
+export function GetGitConfig(arg1:string):Promise<Record<string, any>>;
+
+export function GetGitHubRepositories():Promise<Array<models.GitHubRepository>>;
+
+export function GetGitHubUser():Promise<models.GitHubUser>;
+
+export function GetGitStatus(arg1:string):Promise<Record<string, any>>;
 
 export function GetHugoVersion():Promise<string>;
 
@@ -107,11 +127,15 @@ export function GetVisualEditingConfig(arg1:string):Promise<models.VisualEditing
 
 export function GetWatchStatus(arg1:string):Promise<boolean>;
 
+export function InitializeGitRepository(arg1:string):Promise<void>;
+
 export function InstallTheme(arg1:string,arg2:string):Promise<void>;
 
 export function InstallThemeSubmodule(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function IsHugoInstalled():Promise<boolean>;
+
+export function LinkProjectToGitHub(arg1:string,arg2:string):Promise<void>;
 
 export function ListArchetypes(arg1:string):Promise<Array<models.Archetype>>;
 
@@ -122,6 +146,10 @@ export function OpenFileDialog(arg1:string,arg2:string):Promise<string>;
 export function OpenInFileExplorer(arg1:string):Promise<void>;
 
 export function OpenMultipleFilesDialog(arg1:string,arg2:string):Promise<Array<string>>;
+
+export function PullFromGitHub(arg1:string,arg2:string,arg3:string):Promise<void>;
+
+export function PushToGitHub(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function ReadFile(arg1:string,arg2:string):Promise<string>;
 
@@ -137,7 +165,11 @@ export function RenameFile(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function ScanDirectory(arg1:string):Promise<Array<models.Project>>;
 
+export function SearchGitHubRepositories(arg1:string,arg2:number):Promise<Array<models.GitHubRepository>>;
+
 export function SearchGitHubThemes(arg1:string,arg2:number):Promise<Array<models.Theme>>;
+
+export function SearchHugoProjects(arg1:string,arg2:number):Promise<Array<models.GitHubRepository>>;
 
 export function SearchThemes(arg1:string,arg2:Record<string, any>):Promise<Array<models.Theme>>;
 
@@ -148,6 +180,8 @@ export function SetAutoRebuild(arg1:string,arg2:boolean):Promise<void>;
 export function SetGitHubToken(arg1:string):Promise<void>;
 
 export function SetVisualEditingEnabled(arg1:string,arg2:boolean):Promise<void>;
+
+export function StageFiles(arg1:string,arg2:Array<string>):Promise<void>;
 
 export function StartServer(arg1:string,arg2:models.ServerOptions):Promise<models.ServerInfo>;
 

@@ -11,7 +11,7 @@ import DeploymentTab from './tabs/DeploymentTab';
 import ThemeBrowser from '../ThemeBrowser/ThemeBrowser';
 import ThemeManager from '../ThemeManager/ThemeManager';
 import ThemesTab from './tabs/ThemesTab';
-import VisualEditor from '../VisualEditor/VisualEditor';
+import GitHubTab from './tabs/GitHubTab';
 import ContentList from '../ContentList/ContentList';
 import ContentWizard from '../ContentWizard/ContentWizard';
 import Button from '../ui/Button';
@@ -26,7 +26,7 @@ interface ProjectViewProps {
   onBack?: () => void;
 }
 
-type Tab = 'overview' | 'files' | 'content' | 'config' | 'build' | 'server' | 'deploy' | 'themes' | 'visual';
+type Tab = 'overview' | 'files' | 'content' | 'config' | 'build' | 'server' | 'deploy' | 'themes' | 'github';
 
 export default function ProjectView({ projectId, onBack }: ProjectViewProps) {
   const [project, setProject] = useState<Project | null>(null);
@@ -153,7 +153,7 @@ export default function ProjectView({ projectId, onBack }: ProjectViewProps) {
     { id: 'server', label: 'Server' },
     { id: 'deploy', label: 'Deploy' },
     { id: 'themes', label: 'Themes' },
-    { id: 'visual', label: 'Visual Edit' },
+    { id: 'github', label: 'GitHub' },
   ];
 
   if (!project) {
@@ -293,16 +293,10 @@ export default function ProjectView({ projectId, onBack }: ProjectViewProps) {
               </ErrorBoundary>
             </div>
           )}
-          {activeTab === 'visual' && project && (
+          {activeTab === 'github' && project && (
             <div className="min-h-full">
               <ErrorBoundary>
-                <div className="p-6">
-                  <VisualEditor 
-                    project={project} 
-                    pagePath={undefined}
-                    onContentUpdated={loadProject}
-                  />
-                </div>
+                <GitHubTab project={project} onProjectUpdate={loadProject} />
               </ErrorBoundary>
             </div>
           )}

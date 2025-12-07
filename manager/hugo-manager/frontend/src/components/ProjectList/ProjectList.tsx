@@ -8,6 +8,7 @@ import LoadingSpinner from '../ui/LoadingSpinner';
 import EmptyState from '../ui/EmptyState';
 import ContextMenu, { useContextMenu, ContextMenuItem } from '../ui/ContextMenu';
 import VirtualList from '../ui/VirtualList';
+import ImportFromGitHubDialog from '../ImportFromGitHubDialog/ImportFromGitHubDialog';
 import { useToast } from '../../hooks/useToast';
 
 type Project = models.Project;
@@ -20,6 +21,7 @@ export default function ProjectList({ onProjectSelect }: ProjectListProps) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showImportDialog, setShowImportDialog] = useState(false);
   const { contextMenu, showContextMenu, hideContextMenu } = useContextMenu();
   const toast = useToast();
 
@@ -133,6 +135,14 @@ export default function ProjectList({ onProjectSelect }: ProjectListProps) {
           Scan Directory
         </Button>
         <Button
+          onClick={() => setShowImportDialog(true)}
+          variant="primary"
+          size="sm"
+          className="whitespace-nowrap"
+        >
+          Import from GitHub
+        </Button>
+        <Button
           onClick={loadProjects}
           variant="secondary"
           isLoading={loading}
@@ -214,6 +224,14 @@ export default function ProjectList({ onProjectSelect }: ProjectListProps) {
           x={contextMenu.x}
           y={contextMenu.y}
           onClose={hideContextMenu}
+        />
+      )}
+      {showImportDialog && (
+        <ImportFromGitHubDialog
+          onClose={() => setShowImportDialog(false)}
+          onImported={async () => {
+            await loadProjects();
+          }}
         />
       )}
     </div>

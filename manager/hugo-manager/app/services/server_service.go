@@ -103,24 +103,63 @@ func (s *ServerService) StartServer(projectID string, options models.ServerOptio
 		port = 1313 // Default Hugo port
 	}
 
-	// Check for port conflicts
-	available, err := s.checkPortAvailable(port)
-	if err != nil {
-		return nil, models.NewAppErrorWithDetails(
-			models.ErrPortCheckFailed,
-			"Failed to check port availability",
-			err.Error(),
-		)
+	// Get ports already in use by other Hugo Manager servers
+	s.mu.RLock()
+	usedPorts := make(map[int]bool)
+	// Check servers map
+	for _, server := range s.servers {
+		if server != nil && server.ProjectID != projectID {
+			// Check if process is still running
+			if server.cmd != nil && server.cmd.Process != nil {
+				if err := server.cmd.Process.Signal(syscall.Signal(0)); err == nil {
+					usedPorts[server.Port] = true
+				}
+			}
+		}
 	}
-	if !available {
+	// Also check serverStatus map for any running servers
+	for projectIDKey, status := range s.serverStatus {
+		if projectIDKey != projectID && status != nil {
+			status.mu.RLock()
+			if status.IsRunning && status.Port > 0 {
+				usedPorts[status.Port] = true
+			}
+			status.mu.RUnlock()
+		}
+	}
+	s.mu.RUnlock()
+
+	// Check if requested port is already in use by another Hugo Manager server
+	if usedPorts[port] {
 		// Try to find an available port
-		port, err = s.findAvailablePort(port)
+		port, err = s.findAvailablePortExcluding(port, usedPorts)
 		if err != nil {
 			return nil, models.NewAppErrorWithDetails(
 				models.ErrPortUnavailable,
 				"Could not find an available port",
 				err.Error(),
 			)
+		}
+	} else {
+		// Check for port conflicts on the system
+		available, err := s.checkPortAvailable(port)
+		if err != nil {
+			return nil, models.NewAppErrorWithDetails(
+				models.ErrPortCheckFailed,
+				"Failed to check port availability",
+				err.Error(),
+			)
+		}
+		if !available {
+			// Try to find an available port
+			port, err = s.findAvailablePortExcluding(port, usedPorts)
+			if err != nil {
+				return nil, models.NewAppErrorWithDetails(
+					models.ErrPortUnavailable,
+					"Could not find an available port",
+					err.Error(),
+				)
+			}
 		}
 	}
 
@@ -472,7 +511,19 @@ func (s *ServerService) checkPortAvailable(port int) (bool, error) {
 
 // findAvailablePort finds an available port starting from the given port
 func (s *ServerService) findAvailablePort(startPort int) (int, error) {
+	return s.findAvailablePortExcluding(startPort, make(map[int]bool))
+}
+
+// findAvailablePortExcluding finds an available port starting from the given port,
+// excluding ports that are already in use (either by Hugo Manager or system)
+func (s *ServerService) findAvailablePortExcluding(startPort int, usedPorts map[int]bool) (int, error) {
 	for port := startPort; port < startPort+100; port++ {
+		// Skip if port is already in use by another Hugo Manager server
+		if usedPorts[port] {
+			continue
+		}
+		
+		// Check if port is available on the system
 		available, err := s.checkPortAvailable(port)
 		if err != nil {
 			continue

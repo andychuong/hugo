@@ -14,8 +14,20 @@ export function CancelBuild(arg1) {
   return window['go']['handlers']['App']['CancelBuild'](arg1);
 }
 
+export function CheckIfHugoProject(arg1, arg2) {
+  return window['go']['handlers']['App']['CheckIfHugoProject'](arg1, arg2);
+}
+
+export function CloneGitHubRepository(arg1, arg2) {
+  return window['go']['handlers']['App']['CloneGitHubRepository'](arg1, arg2);
+}
+
 export function CloneProject(arg1, arg2) {
   return window['go']['handlers']['App']['CloneProject'](arg1, arg2);
+}
+
+export function CommitChanges(arg1, arg2) {
+  return window['go']['handlers']['App']['CommitChanges'](arg1, arg2);
 }
 
 export function ConvertConfigFormat(arg1, arg2) {
@@ -44,6 +56,10 @@ export function CreateDirectory(arg1, arg2) {
 
 export function CreateFile(arg1, arg2, arg3) {
   return window['go']['handlers']['App']['CreateFile'](arg1, arg2, arg3);
+}
+
+export function CreateGitHubRepository(arg1, arg2, arg3) {
+  return window['go']['handlers']['App']['CreateGitHubRepository'](arg1, arg2, arg3);
 }
 
 export function CreateNewProject(arg1, arg2) {
@@ -102,6 +118,10 @@ export function GetAvailableEnvironments(arg1) {
   return window['go']['handlers']['App']['GetAvailableEnvironments'](arg1);
 }
 
+export function GetBranches(arg1) {
+  return window['go']['handlers']['App']['GetBranches'](arg1);
+}
+
 export function GetBuildHistory(arg1, arg2) {
   return window['go']['handlers']['App']['GetBuildHistory'](arg1, arg2);
 }
@@ -116,6 +136,10 @@ export function GetBuildStatus(arg1) {
 
 export function GetBulkOperation(arg1) {
   return window['go']['handlers']['App']['GetBulkOperation'](arg1);
+}
+
+export function GetCommitHistory(arg1, arg2) {
+  return window['go']['handlers']['App']['GetCommitHistory'](arg1, arg2);
 }
 
 export function GetConfig(arg1, arg2) {
@@ -144,6 +168,22 @@ export function GetDeploymentsForProject(arg1) {
 
 export function GetEditableRegions(arg1, arg2) {
   return window['go']['handlers']['App']['GetEditableRegions'](arg1, arg2);
+}
+
+export function GetGitConfig(arg1) {
+  return window['go']['handlers']['App']['GetGitConfig'](arg1);
+}
+
+export function GetGitHubRepositories() {
+  return window['go']['handlers']['App']['GetGitHubRepositories']();
+}
+
+export function GetGitHubUser() {
+  return window['go']['handlers']['App']['GetGitHubUser']();
+}
+
+export function GetGitStatus(arg1) {
+  return window['go']['handlers']['App']['GetGitStatus'](arg1);
 }
 
 export function GetHugoVersion() {
@@ -210,6 +250,10 @@ export function GetWatchStatus(arg1) {
   return window['go']['handlers']['App']['GetWatchStatus'](arg1);
 }
 
+export function InitializeGitRepository(arg1) {
+  return window['go']['handlers']['App']['InitializeGitRepository'](arg1);
+}
+
 export function InstallTheme(arg1, arg2) {
   return window['go']['handlers']['App']['InstallTheme'](arg1, arg2);
 }
@@ -220,6 +264,10 @@ export function InstallThemeSubmodule(arg1, arg2, arg3) {
 
 export function IsHugoInstalled() {
   return window['go']['handlers']['App']['IsHugoInstalled']();
+}
+
+export function LinkProjectToGitHub(arg1, arg2) {
+  return window['go']['handlers']['App']['LinkProjectToGitHub'](arg1, arg2);
 }
 
 export function ListArchetypes(arg1) {
@@ -240,6 +288,14 @@ export function OpenInFileExplorer(arg1) {
 
 export function OpenMultipleFilesDialog(arg1, arg2) {
   return window['go']['handlers']['App']['OpenMultipleFilesDialog'](arg1, arg2);
+}
+
+export function PullFromGitHub(arg1, arg2, arg3) {
+  return window['go']['handlers']['App']['PullFromGitHub'](arg1, arg2, arg3);
+}
+
+export function PushToGitHub(arg1, arg2, arg3) {
+  return window['go']['handlers']['App']['PushToGitHub'](arg1, arg2, arg3);
 }
 
 export function ReadFile(arg1, arg2) {
@@ -270,8 +326,16 @@ export function ScanDirectory(arg1) {
   return window['go']['handlers']['App']['ScanDirectory'](arg1);
 }
 
+export function SearchGitHubRepositories(arg1, arg2) {
+  return window['go']['handlers']['App']['SearchGitHubRepositories'](arg1, arg2);
+}
+
 export function SearchGitHubThemes(arg1, arg2) {
   return window['go']['handlers']['App']['SearchGitHubThemes'](arg1, arg2);
+}
+
+export function SearchHugoProjects(arg1, arg2) {
+  return window['go']['handlers']['App']['SearchHugoProjects'](arg1, arg2);
 }
 
 export function SearchThemes(arg1, arg2) {
@@ -292,6 +356,10 @@ export function SetGitHubToken(arg1) {
 
 export function SetVisualEditingEnabled(arg1, arg2) {
   return window['go']['handlers']['App']['SetVisualEditingEnabled'](arg1, arg2);
+}
+
+export function StageFiles(arg1, arg2) {
+  return window['go']['handlers']['App']['StageFiles'](arg1, arg2);
 }
 
 export function StartServer(arg1, arg2) {

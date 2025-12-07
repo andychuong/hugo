@@ -97,6 +97,13 @@ export default function ServerTab({ project, onProjectUpdate }: ServerTabProps) 
       
       setServerStatus(info);
       
+      // Update serverOptions with the actual port/URL in case port was auto-assigned
+      if (info.port && info.port !== serverOptions.port) {
+        // Port was auto-assigned, update baseURL to match
+        const newBaseURL = info.url || `http://localhost:${info.port}`;
+        setServerOptions({ ...serverOptions, port: info.port, baseURL: newBaseURL });
+      }
+      
       // Small delay to ensure backend has updated the project status
       setTimeout(() => {
         if (onProjectUpdate) {
@@ -253,7 +260,18 @@ export default function ServerTab({ project, onProjectUpdate }: ServerTabProps) 
               <input
                 type="number"
                 value={serverOptions.port || 1313}
-                onChange={(e) => setServerOptions({ ...serverOptions, port: parseInt(e.target.value) || 1313 })}
+                onChange={(e) => {
+                  const newPort = parseInt(e.target.value) || 1313;
+                  // Auto-update baseURL if it's a localhost URL or empty
+                  let newBaseURL = serverOptions.baseURL || '';
+                  if (!newBaseURL || newBaseURL.match(/^https?:\/\/localhost(:\d+)?\/?$/i) || newBaseURL.match(/^https?:\/\/127\.0\.0\.1(:\d+)?\/?$/i)) {
+                    newBaseURL = `http://localhost:${newPort}`;
+                  } else if (newBaseURL.match(/^https?:\/\/localhost:\d+/i) || newBaseURL.match(/^https?:\/\/127\.0\.0\.1:\d+/i)) {
+                    // Update port in existing localhost URL
+                    newBaseURL = newBaseURL.replace(/:\d+/, `:${newPort}`);
+                  }
+                  setServerOptions({ ...serverOptions, port: newPort, baseURL: newBaseURL });
+                }}
                 className="w-full px-3 py-2 bg-gray-700 text-white rounded border border-gray-600 focus:border-blue-500 focus:outline-none"
                 min="1024"
                 max="65535"
@@ -268,9 +286,12 @@ export default function ServerTab({ project, onProjectUpdate }: ServerTabProps) 
                 type="text"
                 value={serverOptions.baseURL || ''}
                 onChange={(e) => setServerOptions({ ...serverOptions, baseURL: e.target.value })}
-                placeholder="http://localhost:1313"
+                placeholder={`http://localhost:${serverOptions.port || 1313}`}
                 className="w-full px-3 py-2 bg-gray-700 text-white rounded border border-gray-600 focus:border-blue-500 focus:outline-none"
               />
+              <p className="text-xs text-gray-400 mt-1">
+                Used for generating absolute URLs. Leave empty to use default (localhost with port).
+              </p>
             </div>
 
             <div className="grid grid-cols-2 gap-4">

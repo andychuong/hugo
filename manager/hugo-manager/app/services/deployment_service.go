@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"hugo-manager/app/models"
@@ -272,11 +273,26 @@ func (s *DeploymentService) deployToNetlify(deployment *models.Deployment, proje
 // deployToVercel deploys to Vercel
 func (s *DeploymentService) deployToVercel(deployment *models.Deployment, project *models.Project, history *models.DeploymentHistory) (string, error) {
 	apiToken, _ := deployment.Config["apiToken"].(string)
-	projectName, _ := deployment.Config["projectName"].(string)
+	workflow, _ := deployment.Config["workflow"].(string)
+	if workflow == "" {
+		workflow = "cli" // Default to CLI for backward compatibility
+	}
 	
 	if apiToken == "" {
 		return "", fmt.Errorf("Vercel API token is required")
 	}
+	
+	if workflow == "git" {
+		return s.deployToVercelGit(deployment, project, history, apiToken)
+	}
+	
+	// CLI-based deployment
+	return s.deployToVercelCLI(deployment, project, history, apiToken)
+}
+
+// deployToVercelCLI deploys pre-built files using Vercel CLI
+func (s *DeploymentService) deployToVercelCLI(deployment *models.Deployment, project *models.Project, history *models.DeploymentHistory, apiToken string) (string, error) {
+	projectName, _ := deployment.Config["projectName"].(string)
 	
 	// Check if Vercel CLI is installed
 	if _, err := exec.LookPath("vercel"); err != nil {
@@ -298,16 +314,192 @@ func (s *DeploymentService) deployToVercel(deployment *models.Deployment, projec
 	cmd.Dir = buildPath
 	
 	output, err := cmd.CombinedOutput()
-	history.Logs = append(history.Logs, string(output))
+	outputStr := string(output)
+	history.Logs = append(history.Logs, outputStr)
 	
 	if err != nil {
 		return "", fmt.Errorf("vercel deploy failed: %v", err)
 	}
 	
-	// Extract URL from output (simplified - in production, parse properly)
-	url := "https://" + projectName + ".vercel.app"
+	// Extract URL from output - Vercel CLI outputs URLs like:
+	// "Production: https://project-name.vercel.app"
+	url := s.extractVercelURL(outputStr, projectName)
 	
 	return url, nil
+}
+
+// deployToVercelGit sets up Git-based deployment via Vercel API
+func (s *DeploymentService) deployToVercelGit(deployment *models.Deployment, project *models.Project, history *models.DeploymentHistory, apiToken string) (string, error) {
+	repository, _ := deployment.Config["repository"].(string)
+	branch, _ := deployment.Config["branch"].(string)
+	projectName, _ := deployment.Config["projectName"].(string)
+	buildCommand, _ := deployment.Config["buildCommand"].(string)
+	outputDirectory, _ := deployment.Config["outputDirectory"].(string)
+	hugoVersion, _ := deployment.Config["hugoVersion"].(string)
+	
+	if repository == "" {
+		return "", fmt.Errorf("Git repository URL is required for Git-based deployment")
+	}
+	
+	if branch == "" {
+		branch = "main"
+	}
+	
+	if buildCommand == "" {
+		buildCommand = "hugo --gc --minify"
+	}
+	
+	if outputDirectory == "" {
+		outputDirectory = "public"
+	}
+	
+	// Check if git is installed
+	if _, err := exec.LookPath("git"); err != nil {
+		return "", fmt.Errorf("Git is not installed. Git-based deployment requires Git")
+	}
+	
+	// Check if Vercel CLI is installed (needed for project setup)
+	if _, err := exec.LookPath("vercel"); err != nil {
+		return "", fmt.Errorf("Vercel CLI is not installed. Please install it: npm install -g vercel")
+	}
+	
+	history.Logs = append(history.Logs, "Setting up Git-based Vercel deployment...")
+	history.Logs = append(history.Logs, fmt.Sprintf("Repository: %s", repository))
+	history.Logs = append(history.Logs, fmt.Sprintf("Branch: %s", branch))
+	
+	// Initialize git repo if needed and push to remote
+	gitPath := filepath.Join(project.Path, ".git")
+	if _, err := os.Stat(gitPath); os.IsNotExist(err) {
+		history.Logs = append(history.Logs, "Initializing Git repository...")
+		cmd := exec.Command("git", "init")
+		cmd.Dir = project.Path
+		if output, err := cmd.CombinedOutput(); err != nil {
+			history.Logs = append(history.Logs, string(output))
+			return "", fmt.Errorf("failed to initialize git: %v", err)
+		}
+		
+		// Add remote
+		cmd = exec.Command("git", "remote", "add", "origin", repository)
+		cmd.Dir = project.Path
+		if _, err := cmd.CombinedOutput(); err != nil {
+			// Remote might already exist, continue
+			history.Logs = append(history.Logs, "Remote may already exist, continuing...")
+		}
+	}
+	
+	// Create vercel.json if it doesn't exist
+	vercelConfigPath := filepath.Join(project.Path, "vercel.json")
+	vercelConfig := map[string]interface{}{
+		"buildCommand": buildCommand,
+		"outputDirectory": outputDirectory,
+	}
+	
+	if hugoVersion != "" {
+		// Note: Environment variables need to be set in Vercel dashboard or via API
+		history.Logs = append(history.Logs, fmt.Sprintf("Note: Set HUGO_VERSION=%s in Vercel project settings", hugoVersion))
+	}
+	
+	// Write vercel.json
+	configData, _ := json.MarshalIndent(vercelConfig, "", "  ")
+	if err := os.WriteFile(vercelConfigPath, configData, 0644); err != nil {
+		history.Logs = append(history.Logs, fmt.Sprintf("Warning: Could not write vercel.json: %v", err))
+	} else {
+		history.Logs = append(history.Logs, "Created vercel.json configuration")
+	}
+	
+	// Add, commit, and push to trigger deployment
+	history.Logs = append(history.Logs, "Committing and pushing to Git repository...")
+	
+	// Add all files
+	cmd := exec.Command("git", "add", ".")
+	cmd.Dir = project.Path
+	if output, err := cmd.CombinedOutput(); err != nil {
+		history.Logs = append(history.Logs, string(output))
+		return "", fmt.Errorf("git add failed: %v", err)
+	}
+	
+	// Commit
+	cmd = exec.Command("git", "commit", "-m", "Deploy to Vercel via Hugo Manager")
+	cmd.Dir = project.Path
+	output, err := cmd.CombinedOutput()
+	history.Logs = append(history.Logs, string(output))
+	if err != nil {
+		// Commit might fail if nothing changed, continue
+		history.Logs = append(history.Logs, "No changes to commit, continuing...")
+	}
+	
+	// Push to trigger Vercel deployment
+	cmd = exec.Command("git", "push", "-u", "origin", branch)
+	cmd.Dir = project.Path
+	output, err = cmd.CombinedOutput()
+	history.Logs = append(history.Logs, string(output))
+	
+	if err != nil {
+		return "", fmt.Errorf("git push failed: %v. Make sure the repository exists and you have push access.", err)
+	}
+	
+	history.Logs = append(history.Logs, "Code pushed successfully. Vercel will automatically build and deploy.")
+	history.Logs = append(history.Logs, "Note: First-time setup requires connecting the repository in Vercel dashboard.")
+	
+	// Try to link project using Vercel CLI
+	if projectName != "" {
+		history.Logs = append(history.Logs, fmt.Sprintf("Linking project '%s' to Vercel...", projectName))
+		cmd := exec.Command("vercel", "link", "--yes", "--token", apiToken, "--project", projectName)
+		cmd.Dir = project.Path
+		output, err := cmd.CombinedOutput()
+		history.Logs = append(history.Logs, string(output))
+		if err != nil {
+			history.Logs = append(history.Logs, "Warning: Could not auto-link project. Please link manually in Vercel dashboard.")
+		}
+	}
+	
+	// Construct expected URL
+	url := fmt.Sprintf("https://%s.vercel.app", projectName)
+	if projectName == "" {
+		// Extract project name from repo URL
+		repoName := filepath.Base(repository)
+		if len(repoName) > 0 && repoName[len(repoName)-4:] == ".git" {
+			repoName = repoName[:len(repoName)-4]
+		}
+		url = fmt.Sprintf("https://%s.vercel.app", repoName)
+	}
+	
+	history.Logs = append(history.Logs, fmt.Sprintf("Deployment URL: %s", url))
+	history.Logs = append(history.Logs, "Check Vercel dashboard for deployment status.")
+	
+	return url, nil
+}
+
+// extractVercelURL extracts the deployment URL from Vercel CLI output
+func (s *DeploymentService) extractVercelURL(output string, projectName string) string {
+	// Vercel CLI outputs URLs in various formats:
+	// "Production: https://project-name.vercel.app"
+	// "https://project-name-xyz123.vercel.app"
+	// Look for https:// URLs with .vercel.app domain
+	
+	lines := strings.Split(output, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.Contains(line, "https://") && strings.Contains(line, ".vercel.app") {
+			// Extract URL
+			start := strings.Index(line, "https://")
+			if start != -1 {
+				url := line[start:]
+				// Find end of URL (space, newline, or end of string)
+				if end := strings.IndexAny(url, " \n\r\t"); end != -1 {
+					url = url[:end]
+				}
+				return url
+			}
+		}
+	}
+	
+	// Fallback: construct URL from project name
+	if projectName != "" {
+		return fmt.Sprintf("https://%s.vercel.app", projectName)
+	}
+	
+	return "https://vercel.app" // Generic fallback
 }
 
 // deployToGitHubPages deploys to GitHub Pages
@@ -337,42 +529,49 @@ func (s *DeploymentService) deployToGitHubPages(deployment *models.Deployment, p
 	// Initialize git repo in build directory if needed
 	gitPath := filepath.Join(buildPath, ".git")
 	if _, err := os.Stat(gitPath); os.IsNotExist(err) {
-		cmd := exec.Command("git", "init")
-		cmd.Dir = buildPath
-		if err := cmd.Run(); err != nil {
+		output, err := utils.ExecuteGitCommand(buildPath, "init")
+		if err != nil {
+			history.Logs = append(history.Logs, string(output))
 			return "", fmt.Errorf("failed to initialize git: %v", err)
 		}
 		
-		cmd = exec.Command("git", "remote", "add", "origin", repo)
-		cmd.Dir = buildPath
-		if err := cmd.Run(); err != nil {
+		output, err = utils.ExecuteGitCommand(buildPath, "remote", "add", "origin", repo)
+		if err != nil {
 			// Remote might already exist, continue
+			history.Logs = append(history.Logs, "Remote may already exist, continuing...")
 		}
 	}
 	
-	// Add, commit, and push
-	cmd := exec.Command("git", "add", ".")
-	cmd.Dir = buildPath
-	if output, err := cmd.CombinedOutput(); err != nil {
+	// Add, commit, and push using git utility (which handles credentials)
+	output, err := utils.ExecuteGitCommand(buildPath, "add", ".")
+	if err != nil {
 		history.Logs = append(history.Logs, string(output))
 		return "", fmt.Errorf("git add failed: %v", err)
 	}
+	history.Logs = append(history.Logs, "Staged files for commit")
 	
-	cmd = exec.Command("git", "commit", "-m", "Deploy from Hugo Manager")
-	cmd.Dir = buildPath
-	output, err := cmd.CombinedOutput()
+	output, err = utils.ExecuteGitCommand(buildPath, "commit", "-m", "Deploy from Hugo Manager")
 	history.Logs = append(history.Logs, string(output))
 	if err != nil {
 		// Commit might fail if nothing changed, continue
+		history.Logs = append(history.Logs, "No changes to commit, continuing...")
 	}
 	
-	cmd = exec.Command("git", "push", "-f", "origin", "HEAD:"+branch)
-	cmd.Dir = buildPath
-	output, err = cmd.CombinedOutput()
+	output, err = utils.ExecuteGitCommand(buildPath, "push", "-f", "origin", "HEAD:"+branch)
 	history.Logs = append(history.Logs, string(output))
 	
 	if err != nil {
-		return "", fmt.Errorf("git push failed: %v", err)
+		outputStr := string(output)
+		// Check if it's an authentication error
+		if strings.Contains(outputStr, "authentication") ||
+			strings.Contains(outputStr, "Permission denied") ||
+			strings.Contains(outputStr, "fatal: could not read Username") {
+			return "", fmt.Errorf("git authentication failed. Please configure git credentials:\n" +
+				"  - For HTTPS: git config --global credential.helper osxkeychain (macOS) or wincred (Windows)\n" +
+				"  - For SSH: ensure SSH keys are added to ssh-agent\n" +
+				"  - Or set GITHUB_TOKEN environment variable")
+		}
+		return "", fmt.Errorf("git push failed: %v\nOutput: %s", err, outputStr)
 	}
 	
 	// Extract URL from repo

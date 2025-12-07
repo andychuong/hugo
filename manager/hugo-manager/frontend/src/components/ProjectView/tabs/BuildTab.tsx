@@ -23,6 +23,7 @@ export default function BuildTab({ project, onProjectUpdate }: BuildTabProps) {
   const [showOptions, setShowOptions] = useState(false);
   const [lastSuccessfulBuild, setLastSuccessfulBuild] = useState<Date | null>(null);
   const [showSuccessAnimation, setShowSuccessAnimation] = useState(false);
+  const [expandedBuildId, setExpandedBuildId] = useState<string | null>(null);
   const previousBuildStatusRef = useRef<string | null>(null);
   const toast = useToast();
   const [buildOptions, setBuildOptions] = useState<BuildOptions>(() => {
@@ -443,36 +444,89 @@ export default function BuildTab({ project, onProjectUpdate }: BuildTabProps) {
         <div className="bg-gray-800 rounded-lg p-6">
           <h2 className="text-xl font-semibold mb-4">Build History</h2>
           <div className="space-y-2">
-            {buildHistory.map((build) => (
-              <div
-                key={build.id}
-                className="bg-gray-900/50 rounded p-4 flex items-center justify-between"
-              >
-                <div className="flex items-center space-x-4">
-                  <span className={`px-2 py-1 rounded text-xs ${getStatusColor(build.status)}`}>
-                    {build.status}
-                  </span>
-                  <span className="text-sm text-gray-400">
-                    {build.startTime ? new Date(build.startTime).toLocaleString() : 'Unknown'}
-                  </span>
-                  {build.duration && build.duration > 0 && (
-                    <span className="text-sm text-gray-400">
-                      {formatDuration(build.duration)}
-                    </span>
-                  )}
-                  {build.filesGenerated && build.filesGenerated > 0 && (
-                    <span className="text-sm text-gray-400">
-                      {build.filesGenerated} files
-                    </span>
+            {buildHistory.map((build) => {
+              const isExpanded = expandedBuildId === build.id;
+              const hasDetails = (build.error && build.error.trim()) || (build.output && build.output.trim());
+              const canExpand = build.status === 'failed' && hasDetails;
+              
+              return (
+                <div key={build.id} className="bg-gray-900/50 rounded overflow-hidden">
+                  <div
+                    className={`p-4 flex items-center justify-between ${
+                      canExpand ? 'cursor-pointer hover:bg-gray-900/70 transition-colors' : ''
+                    }`}
+                    onClick={() => canExpand && setExpandedBuildId(isExpanded ? null : build.id)}
+                  >
+                    <div className="flex items-center space-x-4 flex-1 min-w-0">
+                      <span className={`px-2 py-1 rounded text-xs flex-shrink-0 ${getStatusColor(build.status)}`}>
+                        {build.status}
+                      </span>
+                      <span className="text-sm text-gray-400 flex-shrink-0">
+                        {build.startTime ? new Date(build.startTime).toLocaleString() : 'Unknown'}
+                      </span>
+                      {build.duration && build.duration > 0 && (
+                        <span className="text-sm text-gray-400 flex-shrink-0">
+                          {formatDuration(build.duration)}
+                        </span>
+                      )}
+                      {build.filesGenerated && build.filesGenerated > 0 && (
+                        <span className="text-sm text-gray-400 flex-shrink-0">
+                          {build.filesGenerated} files
+                        </span>
+                      )}
+                      {build.error && (
+                        <span className="text-xs text-red-400 truncate flex-1 min-w-0">
+                          {build.error}
+                        </span>
+                      )}
+                    </div>
+                    {canExpand && (
+                      <button
+                        className="ml-4 text-gray-400 hover:text-white transition-colors flex-shrink-0"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setExpandedBuildId(isExpanded ? null : build.id);
+                        }}
+                      >
+                        <svg
+                          className={`w-5 h-5 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                  
+                  {isExpanded && hasDetails && (
+                    <div className="border-t border-gray-700 p-4 space-y-4">
+                      {build.error && build.error.trim() && (
+                        <div>
+                          <h4 className="text-sm font-semibold text-red-400 mb-2">Error Message</h4>
+                          <div className="bg-red-900/20 border border-red-800/50 rounded p-3 font-mono text-sm text-red-200 whitespace-pre-wrap break-words">
+                            {build.error}
+                          </div>
+                        </div>
+                      )}
+                      {build.output && build.output.trim() && (
+                        <div>
+                          <h4 className="text-sm font-semibold text-gray-300 mb-2">Build Output</h4>
+                          <div className="bg-gray-900 rounded p-3 font-mono text-sm text-gray-300 max-h-96 overflow-y-auto whitespace-pre-wrap break-words">
+                            {build.output.split('\n').map((line, index) => (
+                              <div key={index} className="mb-1">
+                                {line || '\u00A0'}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
-                {build.error && (
-                  <span className="text-xs text-red-400 truncate max-w-md">
-                    {build.error}
-                  </span>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

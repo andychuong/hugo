@@ -28,6 +28,7 @@ type App struct {
 	themeService         *services.ThemeService
 	visualEditingService *services.VisualEditingService
 	multiSiteService     *services.MultiSiteService
+	githubService        *services.GitHubService
 }
 
 // NewApp creates a new App application struct
@@ -67,6 +68,8 @@ func NewApp() *App {
 		fmt.Printf("Warning: Failed to initialize multi-site service: %v\n", err)
 	}
 
+	githubService := services.NewGitHubService()
+
 	return &App{
 		projectService:       projectService,
 		hugoService:          hugoService,
@@ -80,6 +83,7 @@ func NewApp() *App {
 		themeService:          themeService,
 		visualEditingService:  visualEditingService,
 		multiSiteService:      multiSiteService,
+		githubService:         githubService,
 	}
 }
 
@@ -742,7 +746,211 @@ func (a *App) SetGitHubToken(token string) error {
 		return models.NewAppError("SERVICE_ERROR", "Theme service not initialized")
 	}
 	a.themeService.SetGitHubToken(token)
+	if a.githubService != nil {
+		a.githubService.SetGitHubToken(token)
+	}
 	return nil
+}
+
+// GitHub Integration Methods
+
+// GetGitHubUser gets the authenticated GitHub user
+func (a *App) GetGitHubUser() (*models.GitHubUser, error) {
+	if a.githubService == nil {
+		return nil, models.NewAppError("SERVICE_ERROR", "GitHub service not initialized")
+	}
+	return a.githubService.GetGitHubUser(a.ctx)
+}
+
+// GetGitHubRepositories gets repositories for the authenticated user
+func (a *App) GetGitHubRepositories() ([]*models.GitHubRepository, error) {
+	if a.githubService == nil {
+		return nil, models.NewAppError("SERVICE_ERROR", "GitHub service not initialized")
+	}
+	return a.githubService.GetUserRepositories(a.ctx)
+}
+
+// SearchGitHubRepositories searches GitHub repositories
+func (a *App) SearchGitHubRepositories(query string, limit int) ([]*models.GitHubRepository, error) {
+	if a.githubService == nil {
+		return nil, models.NewAppError("SERVICE_ERROR", "GitHub service not initialized")
+	}
+	return a.githubService.SearchRepositories(a.ctx, query, limit)
+}
+
+// CheckIfHugoProject checks if a GitHub repository is a Hugo project
+func (a *App) CheckIfHugoProject(owner string, repo string) (*models.HugoProjectInfo, error) {
+	if a.githubService == nil {
+		return nil, models.NewAppError("SERVICE_ERROR", "GitHub service not initialized")
+	}
+	return a.githubService.CheckIfHugoProject(a.ctx, owner, repo)
+}
+
+// SearchHugoProjects searches for Hugo projects on GitHub
+func (a *App) SearchHugoProjects(query string, limit int) ([]*models.GitHubRepository, error) {
+	if a.githubService == nil {
+		return nil, models.NewAppError("SERVICE_ERROR", "GitHub service not initialized")
+	}
+	return a.githubService.SearchHugoProjects(a.ctx, query, limit)
+}
+
+// CloneGitHubRepository clones a GitHub repository to a local directory
+func (a *App) CloneGitHubRepository(repoURL string, targetDir string) error {
+	if a.githubService == nil {
+		return models.NewAppError("SERVICE_ERROR", "GitHub service not initialized")
+	}
+	return a.githubService.CloneRepository(repoURL, targetDir)
+}
+
+// CreateGitHubRepository creates a new GitHub repository
+func (a *App) CreateGitHubRepository(name string, description string, isPrivate bool) (*models.GitHubRepository, error) {
+	if a.githubService == nil {
+		return nil, models.NewAppError("SERVICE_ERROR", "GitHub service not initialized")
+	}
+	return a.githubService.CreateGitHubRepository(a.ctx, name, description, isPrivate)
+}
+
+// GetGitStatus gets git status for a project
+func (a *App) GetGitStatus(projectID string) (map[string]interface{}, error) {
+	if a.githubService == nil {
+		return nil, models.NewAppError("SERVICE_ERROR", "GitHub service not initialized")
+	}
+	project, err := a.projectService.GetProject(projectID)
+	if err != nil {
+		return nil, err
+	}
+	status, err := a.githubService.GetGitStatus(project.Path)
+	if err != nil {
+		return nil, err
+	}
+	// Convert to map for JSON serialization
+	return map[string]interface{}{
+		"modifiedFiles":  status.ModifiedFiles,
+		"stagedFiles":    status.StagedFiles,
+		"untrackedFiles": status.UntrackedFiles,
+		"currentBranch":  status.CurrentBranch,
+		"hasChanges":     status.HasChanges,
+		"isClean":        status.IsClean,
+	}, nil
+}
+
+// GetGitConfig gets git configuration for a project
+func (a *App) GetGitConfig(projectID string) (map[string]interface{}, error) {
+	if a.githubService == nil {
+		return nil, models.NewAppError("SERVICE_ERROR", "GitHub service not initialized")
+	}
+	project, err := a.projectService.GetProject(projectID)
+	if err != nil {
+		return nil, err
+	}
+	config, err := a.githubService.GetGitConfig(project.Path)
+	if err != nil {
+		return nil, err
+	}
+	// Convert to map for JSON serialization
+	return map[string]interface{}{
+		"userName":        config.UserName,
+		"userEmail":       config.UserEmail,
+		"remoteUrl":       config.RemoteURL,
+		"credentialHelper": config.CredentialHelper,
+		"isGitRepo":       config.IsGitRepo,
+	}, nil
+}
+
+// StageFiles stages files for commit
+func (a *App) StageFiles(projectID string, files []string) error {
+	if a.githubService == nil {
+		return models.NewAppError("SERVICE_ERROR", "GitHub service not initialized")
+	}
+	project, err := a.projectService.GetProject(projectID)
+	if err != nil {
+		return err
+	}
+	return a.githubService.StageFiles(project.Path, files)
+}
+
+// CommitChanges commits staged changes
+func (a *App) CommitChanges(projectID string, message string) error {
+	if a.githubService == nil {
+		return models.NewAppError("SERVICE_ERROR", "GitHub service not initialized")
+	}
+	project, err := a.projectService.GetProject(projectID)
+	if err != nil {
+		return err
+	}
+	return a.githubService.CommitChanges(project.Path, message)
+}
+
+// PushToGitHub pushes changes to GitHub
+func (a *App) PushToGitHub(projectID string, remote string, branch string) error {
+	if a.githubService == nil {
+		return models.NewAppError("SERVICE_ERROR", "GitHub service not initialized")
+	}
+	project, err := a.projectService.GetProject(projectID)
+	if err != nil {
+		return err
+	}
+	return a.githubService.PushToGitHub(project.Path, remote, branch)
+}
+
+// PullFromGitHub pulls changes from GitHub
+func (a *App) PullFromGitHub(projectID string, remote string, branch string) error {
+	if a.githubService == nil {
+		return models.NewAppError("SERVICE_ERROR", "GitHub service not initialized")
+	}
+	project, err := a.projectService.GetProject(projectID)
+	if err != nil {
+		return err
+	}
+	return a.githubService.PullFromGitHub(project.Path, remote, branch)
+}
+
+// GetBranches gets list of branches
+func (a *App) GetBranches(projectID string) ([]*models.GitBranch, error) {
+	if a.githubService == nil {
+		return nil, models.NewAppError("SERVICE_ERROR", "GitHub service not initialized")
+	}
+	project, err := a.projectService.GetProject(projectID)
+	if err != nil {
+		return nil, err
+	}
+	return a.githubService.GetBranches(project.Path)
+}
+
+// GetCommitHistory retrieves commit history for a project
+func (a *App) GetCommitHistory(projectID string, limit int) ([]*models.GitCommit, error) {
+	if a.githubService == nil {
+		return nil, models.NewAppError("SERVICE_ERROR", "GitHub service not initialized")
+	}
+	project, err := a.projectService.GetProject(projectID)
+	if err != nil {
+		return nil, err
+	}
+	return a.githubService.GetCommitHistory(project.Path, limit)
+}
+
+// InitializeGitRepository initializes a git repository in a project
+func (a *App) InitializeGitRepository(projectID string) error {
+	if a.githubService == nil {
+		return models.NewAppError("SERVICE_ERROR", "GitHub service not initialized")
+	}
+	project, err := a.projectService.GetProject(projectID)
+	if err != nil {
+		return err
+	}
+	return a.githubService.InitializeGitRepository(project.Path)
+}
+
+// LinkProjectToGitHub links a project to a GitHub repository
+func (a *App) LinkProjectToGitHub(projectID string, repoURL string) error {
+	if a.githubService == nil {
+		return models.NewAppError("SERVICE_ERROR", "GitHub service not initialized")
+	}
+	project, err := a.projectService.GetProject(projectID)
+	if err != nil {
+		return err
+	}
+	return a.githubService.LinkProjectToGitHub(project.Path, repoURL)
 }
 
 // Visual Editing Methods

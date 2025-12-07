@@ -171,21 +171,134 @@ export default function DeploymentTab({ project, onProjectUpdate }: DeploymentTa
           </>
         );
       case 'vercel':
+        // Default to 'cli' for backward compatibility
+        const vercelWorkflow = (config.workflow && (config.workflow === 'git' || config.workflow === 'cli')) 
+          ? config.workflow 
+          : 'cli';
         return (
           <>
-            <Input
-              label="API Token"
-              type="password"
-              value={config.apiToken || ''}
-              onChange={(e) => setConfig({ ...config, apiToken: e.target.value })}
-              placeholder="Enter Vercel API token"
-            />
-            <Input
-              label="Project Name (optional)"
-              value={config.projectName || ''}
-              onChange={(e) => setConfig({ ...config, projectName: e.target.value })}
-              placeholder="Enter project name"
-            />
+            <div>
+              <label className="block text-sm font-medium text-hugo-text-secondary mb-2">
+                Deployment Method
+              </label>
+              <select
+                value={vercelWorkflow}
+                onChange={(e) => setConfig({ ...config, workflow: e.target.value })}
+                className="w-full px-3 py-2 bg-hugo-bg-secondary border border-hugo-border-default rounded text-hugo-text-primary focus:border-hugo-accent-teal focus:outline-none"
+              >
+                <option value="cli">CLI Deployment (Pre-built)</option>
+                <option value="git">Git Repository (Auto-build)</option>
+              </select>
+              <p className="text-xs text-hugo-text-tertiary mt-1">
+                {vercelWorkflow === 'cli' 
+                  ? 'Deploy pre-built files using Vercel CLI'
+                  : 'Connect Git repository for automatic builds'}
+              </p>
+            </div>
+
+            {vercelWorkflow === 'git' ? (
+              <>
+                <div className="space-y-4">
+                  <div className="space-y-3">
+                    <h4 className="text-sm font-semibold text-hugo-text-secondary uppercase tracking-wide">Repository Settings</h4>
+                    <Input
+                      label="Git Repository URL"
+                      value={config.repository || ''}
+                      onChange={(e) => setConfig({ ...config, repository: e.target.value })}
+                      placeholder="https://github.com/username/repo.git"
+                    />
+                    <Input
+                      label="Branch (optional)"
+                      value={config.branch || ''}
+                      onChange={(e) => setConfig({ ...config, branch: e.target.value })}
+                      placeholder="main"
+                    />
+                  </div>
+
+                  <div className="space-y-3 pt-2">
+                    <h4 className="text-sm font-semibold text-hugo-text-secondary uppercase tracking-wide">Project Settings</h4>
+                    <Input
+                      label="API Token"
+                      type="password"
+                      value={config.apiToken || ''}
+                      onChange={(e) => setConfig({ ...config, apiToken: e.target.value })}
+                      placeholder="Enter Vercel API token (for project creation)"
+                    />
+                    <Input
+                      label="Project Name (optional)"
+                      value={config.projectName || ''}
+                      onChange={(e) => setConfig({ ...config, projectName: e.target.value })}
+                      placeholder="Enter project name"
+                    />
+                  </div>
+
+                  <div className="space-y-3 pt-2">
+                    <h4 className="text-sm font-semibold text-hugo-text-secondary uppercase tracking-wide">Build Settings</h4>
+                    <div>
+                      <label className="block text-sm font-medium text-hugo-text-secondary mb-2">
+                        Build Command (optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={config.buildCommand || ''}
+                        onChange={(e) => setConfig({ ...config, buildCommand: e.target.value })}
+                        placeholder="hugo --gc --minify"
+                        className="w-full px-3 py-2 bg-hugo-bg-secondary border border-hugo-border-default rounded text-hugo-text-primary focus:border-hugo-accent-teal focus:outline-none"
+                      />
+                      <p className="text-xs text-hugo-text-tertiary mt-1">
+                        Default: hugo --gc --minify
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-hugo-text-secondary mb-2">
+                        Output Directory (optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={config.outputDirectory || ''}
+                        onChange={(e) => setConfig({ ...config, outputDirectory: e.target.value })}
+                        placeholder="public"
+                        className="w-full px-3 py-2 bg-hugo-bg-secondary border border-hugo-border-default rounded text-hugo-text-primary focus:border-hugo-accent-teal focus:outline-none"
+                      />
+                      <p className="text-xs text-hugo-text-tertiary mt-1">
+                        Default: public
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-hugo-text-secondary mb-2">
+                        Hugo Version (optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={config.hugoVersion || ''}
+                        onChange={(e) => setConfig({ ...config, hugoVersion: e.target.value })}
+                        placeholder="0.123.2"
+                        className="w-full px-3 py-2 bg-hugo-bg-secondary border border-hugo-border-default rounded text-hugo-text-primary focus:border-hugo-accent-teal focus:outline-none"
+                      />
+                      <p className="text-xs text-hugo-text-tertiary mt-1">
+                        Set HUGO_VERSION environment variable
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <Input
+                  label="API Token"
+                  type="password"
+                  value={config.apiToken || ''}
+                  onChange={(e) => setConfig({ ...config, apiToken: e.target.value })}
+                  placeholder="Enter Vercel API token"
+                />
+                <Input
+                  label="Project Name (optional)"
+                  value={config.projectName || ''}
+                  onChange={(e) => setConfig({ ...config, projectName: e.target.value })}
+                  placeholder="Enter project name"
+                />
+              </>
+            )}
           </>
         );
       case 'github-pages':
@@ -359,49 +472,56 @@ export default function DeploymentTab({ project, onProjectUpdate }: DeploymentTa
 
       {/* Create Deployment Dialog */}
       {showCreateDialog && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <Card className="w-full max-w-md p-6">
-            <h3 className="text-xl font-bold text-hugo-text-primary mb-4">Create Deployment</h3>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-2xl max-h-[90vh] flex flex-col">
+            {/* Header - Fixed */}
+            <div className="px-6 pt-6 pb-4 border-b border-hugo-border-default flex-shrink-0">
+              <h3 className="text-xl font-bold text-hugo-text-primary">Create Deployment</h3>
+            </div>
             
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-hugo-text-secondary mb-2">
-                  Deployment Type
-                </label>
-                <select
-                  className="w-full px-3 py-2 bg-hugo-bg-secondary border border-hugo-border-default rounded text-hugo-text-primary"
-                  value={deploymentType}
-                  onChange={(e) => {
-                    setDeploymentType(e.target.value as DeploymentType);
-                    setConfig({});
-                  }}
-                >
-                  <option value="netlify">Netlify</option>
-                  <option value="vercel">Vercel</option>
-                  <option value="github-pages">GitHub Pages</option>
-                  <option value="generic">Generic (Custom Script)</option>
-                </select>
-              </div>
+            {/* Scrollable Content */}
+            <div className="flex-1 overflow-y-auto px-6 py-4">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-hugo-text-secondary mb-2">
+                    Deployment Type
+                  </label>
+                  <select
+                    className="w-full px-3 py-2 bg-hugo-bg-secondary border border-hugo-border-default rounded text-hugo-text-primary"
+                    value={deploymentType}
+                    onChange={(e) => {
+                      setDeploymentType(e.target.value as DeploymentType);
+                      setConfig({});
+                    }}
+                  >
+                    <option value="netlify">Netlify</option>
+                    <option value="vercel">Vercel</option>
+                    <option value="github-pages">GitHub Pages</option>
+                    <option value="generic">Generic (Custom Script)</option>
+                  </select>
+                </div>
 
-              {renderConfigFields()}
-
-              <div className="flex gap-2 justify-end pt-4">
-                <Button
-                  onClick={() => {
-                    setShowCreateDialog(false);
-                    setConfig({});
-                  }}
-                  variant="secondary"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleCreateDeployment}
-                  variant="primary"
-                >
-                  Create
-                </Button>
+                {renderConfigFields()}
               </div>
+            </div>
+
+            {/* Footer - Fixed */}
+            <div className="px-6 py-4 border-t border-hugo-border-default flex gap-2 justify-end flex-shrink-0">
+              <Button
+                onClick={() => {
+                  setShowCreateDialog(false);
+                  setConfig({});
+                }}
+                variant="secondary"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleCreateDeployment}
+                variant="primary"
+              >
+                Create
+              </Button>
             </div>
           </Card>
         </div>
