@@ -237,6 +237,26 @@ export default function BuildTab({ project, onProjectUpdate }: BuildTabProps) {
 
   return (
     <div className="space-y-6">
+      {/* Success Message - View Site */}
+      {buildStatus?.status === 'success' && !project.status?.isServing && (
+        <div className="bg-green-900/20 border border-green-500/30 rounded-lg p-4">
+          <div className="flex items-start space-x-3">
+            <svg className="w-6 h-6 text-green-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div className="flex-1">
+              <h3 className="text-green-200 font-semibold mb-1">Build Successful!</h3>
+              <p className="text-green-300/80 text-sm mb-3">
+                Your site has been built successfully. To view it, go to the <strong>Server</strong> tab and click "Start Server".
+              </p>
+              <p className="text-green-300/60 text-xs">
+                💡 Tip: The built files are in the <code className="bg-green-900/30 px-1 py-0.5 rounded">public/</code> directory, but they need to be served by a web server to work correctly.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Build Status */}
       <div className={`bg-gray-800 rounded-lg p-6 transition-all duration-300 ${
         showSuccessAnimation ? 'ring-2 ring-green-500 ring-opacity-50' : ''

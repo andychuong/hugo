@@ -221,9 +221,6 @@ function App() {
                   <Button onClick={handleAddProject} variant="secondary" size="md">
                     Add Existing Project
                   </Button>
-                  <Button onClick={() => setView('multisite')} variant="secondary" size="md">
-                    Multi-Site Operations
-                  </Button>
                 </div>
               </div>
 

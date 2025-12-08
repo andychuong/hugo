@@ -98,14 +98,12 @@ export default function ProjectList({ onProjectSelect }: ProjectListProps) {
         label: 'Remove Project',
         icon: '🗑️',
         handler: async () => {
-          if (confirm(`Are you sure you want to remove "${project.name}"?`)) {
-            try {
-              await RemoveProject(project.id);
-              toast.success('Project removed');
-              await loadProjects();
-            } catch (err: any) {
-              toast.error(err.message || 'Failed to remove project');
-            }
+          try {
+            await RemoveProject(project.id);
+            toast.success('Project removed successfully');
+            await loadProjects();
+          } catch (err: any) {
+            toast.error(err.message || 'Failed to remove project');
           }
         },
       },
@@ -190,27 +188,24 @@ export default function ProjectList({ onProjectSelect }: ProjectListProps) {
           containerHeight={600}
           renderItem={(project) => (
             <div className="p-2">
-              <div
+              <ProjectCard
+                project={project}
+                onClick={() => onProjectSelect?.(project)}
                 onContextMenu={(e) => handleProjectContextMenu(e, project)}
-              >
-                <ProjectCard
-                  project={project}
-                  onClick={() => onProjectSelect?.(project)}
-                />
-              </div>
+                onMenuClick={(e) => handleProjectContextMenu(e, project)}
+              />
             </div>
           )}
         />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredProjects.map((project) => (
-            <div
-              key={project.id}
-              onContextMenu={(e) => handleProjectContextMenu(e, project)}
-            >
+            <div key={project.id}>
               <ProjectCard
                 project={project}
                 onClick={() => onProjectSelect?.(project)}
+                onContextMenu={(e) => handleProjectContextMenu(e, project)}
+                onMenuClick={(e) => handleProjectContextMenu(e, project)}
               />
             </div>
           ))}

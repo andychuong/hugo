@@ -121,6 +121,8 @@ export function GetThemeFromMarketplace(arg1:string):Promise<models.Theme>;
 
 export function GetThemeIndex():Promise<Array<models.Theme>>;
 
+export function GetThemeInstallStatus(arg1:string):Promise<services.ThemeInstallStatus>;
+
 export function GetThemeMetadata(arg1:string):Promise<models.ThemeMetadata>;
 
 export function GetVisualEditingConfig(arg1:string):Promise<models.VisualEditingConfig>;

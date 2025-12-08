@@ -57,15 +57,16 @@ export default function ContextMenu({ items, x, y, onClose }: ContextMenuProps) 
       }
     };
 
-    // Close on outside click
-    setTimeout(() => {
-      document.addEventListener('click', handleClickOutside);
-    }, 0);
+    // Close on outside click - delay to avoid immediate close
+    const timeoutId = setTimeout(() => {
+      document.addEventListener('click', handleClickOutside, true);
+    }, 100);
 
     document.addEventListener('keydown', handleEscape);
 
     return () => {
-      document.removeEventListener('click', handleClickOutside);
+      clearTimeout(timeoutId);
+      document.removeEventListener('click', handleClickOutside, true);
       document.removeEventListener('keydown', handleEscape);
     };
   }, [onClose]);
@@ -80,11 +81,11 @@ export default function ContextMenu({ items, x, y, onClose }: ContextMenuProps) 
   return (
     <div
       ref={menuRef}
-      className="fixed z-50"
+      className="fixed z-[9999] pointer-events-auto"
       style={{ left: `${position.x}px`, top: `${position.y}px` }}
       onClick={(e) => e.stopPropagation()}
     >
-      <Card className="p-1 min-w-[200px] shadow-lg">
+      <Card className="p-1 min-w-[200px] shadow-2xl border-2 border-hugo-border-default bg-hugo-bg-primary">
         {items.map((item, index) => {
           if (item.divider) {
             return (
@@ -98,19 +99,25 @@ export default function ContextMenu({ items, x, y, onClose }: ContextMenuProps) 
           return (
             <button
               key={item.id}
-              onClick={() => handleItemClick(item)}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleItemClick(item);
+              }}
               disabled={item.disabled}
+              type="button"
               className={`
                 w-full px-3 py-2 text-left text-sm flex items-center gap-2
-                rounded hover:bg-hugo-bg-secondary
+                rounded transition-colors
                 ${item.disabled 
                   ? 'opacity-50 cursor-not-allowed' 
-                  : 'cursor-pointer text-hugo-text-primary'
+                  : 'cursor-pointer text-hugo-text-primary hover:bg-hugo-accent-teal/20 hover:text-hugo-accent-teal'
                 }
+                ${item.id === 'remove' ? 'hover:bg-red-900/30 hover:text-red-300' : ''}
               `}
             >
-              {item.icon && <span>{item.icon}</span>}
-              <span>{item.label}</span>
+              {item.icon && <span className="text-base">{item.icon}</span>}
+              <span className="font-medium">{item.label}</span>
             </button>
           );
         })}
@@ -141,6 +148,7 @@ export function useContextMenu() {
     hideContextMenu,
   };
 }
+
 
 
 

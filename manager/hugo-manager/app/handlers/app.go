@@ -697,6 +697,14 @@ func (a *App) InstallThemeSubmodule(projectID string, themeURL string, themeName
 	return a.themeService.InstallThemeSubmodule(projectID, themeURL, themeName)
 }
 
+// GetThemeInstallStatus returns the current theme installation status
+func (a *App) GetThemeInstallStatus(projectID string) (*services.ThemeInstallStatus, error) {
+	if a.themeService == nil {
+		return nil, models.NewAppError("SERVICE_ERROR", "Theme service not initialized")
+	}
+	return a.themeService.GetInstallStatus(projectID)
+}
+
 // RemoveTheme removes a theme from a project
 func (a *App) RemoveTheme(projectID string, themePath string) error {
 	if a.themeService == nil {

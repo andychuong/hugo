@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"hugo-manager/app/models"
@@ -20,15 +21,31 @@ import (
 	"github.com/pelletier/go-toml/v2"
 )
 
+// ThemeInstallStatus tracks the status of a theme installation
+type ThemeInstallStatus struct {
+	ThemeID    string
+	ThemeName  string
+	ProjectID  string
+	Status     string // "installing", "success", "failed"
+	Progress   int    // 0-100
+	Message    string
+	Error      string
+	StartTime  time.Time
+	EndTime    time.Time
+	mu         sync.RWMutex
+}
+
 // ThemeService handles theme management operations
 type ThemeService struct {
-	projectService *ProjectService
-	hugoService    *HugoService
-	configService  *ConfigService
-	indexCachePath string
-	indexCache     []*models.Theme
-	indexCacheTime time.Time
-	githubToken    string // Optional GitHub token for API authentication
+	projectService    *ProjectService
+	hugoService       *HugoService
+	configService     *ConfigService
+	indexCachePath    string
+	indexCache        []*models.Theme
+	indexCacheTime    time.Time
+	githubToken       string // Optional GitHub token for API authentication
+	installStatus     map[string]*ThemeInstallStatus // projectID -> install status
+	mu                sync.RWMutex
 }
 
 // NewThemeService creates a new theme service
@@ -46,6 +63,7 @@ func NewThemeService(projectService *ProjectService, hugoService *HugoService, c
 		configService:  configService,
 		indexCachePath: indexCachePath,
 		indexCache:     []*models.Theme{},
+		installStatus:  make(map[string]*ThemeInstallStatus),
 	}, nil
 }
 
@@ -843,14 +861,68 @@ func (s *ThemeService) GetThemeMetadata(themePath string) (*models.ThemeMetadata
 	return metadata, nil
 }
 
-// InstallTheme installs a theme via Hugo Modules
+// InstallTheme installs a theme via Hugo Modules (async)
 func (s *ThemeService) InstallTheme(projectID string, themePath string) error {
-	fmt.Printf("InstallTheme: Starting installation for project %s, theme path: %s\n", projectID, themePath)
+	// Check if already installing
+	s.mu.RLock()
+	status, exists := s.installStatus[projectID]
+	s.mu.RUnlock()
+	
+	if exists && status.Status == "installing" {
+		return fmt.Errorf("theme installation already in progress for this project")
+	}
+	
+	// Create install status
+	themeName := filepath.Base(strings.TrimSuffix(themePath, ".git"))
+	if idx := strings.Index(themeName, "@"); idx != -1 {
+		themeName = themeName[:idx]
+	}
+	
+	s.mu.Lock()
+	s.installStatus[projectID] = &ThemeInstallStatus{
+		ThemeID:   uuid.New().String(),
+		ThemeName: themeName,
+		ProjectID: projectID,
+		Status:    "installing",
+		Progress:  0,
+		Message:   "Starting installation...",
+		StartTime: time.Now(),
+	}
+	s.mu.Unlock()
+	
+	// Start installation in background
+	go s.executeInstallTheme(projectID, themePath)
+	
+	return nil
+}
+
+// updateInstallStatus updates the installation status
+func (s *ThemeService) updateInstallStatus(projectID, status string, progress int, message, errorMsg string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	
+	if installStatus, exists := s.installStatus[projectID]; exists {
+		installStatus.Status = status
+		installStatus.Progress = progress
+		installStatus.Message = message
+		installStatus.Error = errorMsg
+		if status == "success" || status == "failed" {
+			installStatus.EndTime = time.Now()
+		}
+	}
+}
+
+// executeInstallTheme performs the actual theme installation
+func (s *ThemeService) executeInstallTheme(projectID string, themePath string) {
+	fmt.Printf("executeInstallTheme: Starting installation for project %s, theme path: %s\n", projectID, themePath)
+	
+	s.updateInstallStatus(projectID, "installing", 10, "Getting project information...", "")
 	
 	project, err := s.projectService.GetProject(projectID)
 	if err != nil {
 		fmt.Printf("InstallTheme: Failed to get project: %v\n", err)
-		return fmt.Errorf("failed to get project: %w", err)
+		s.updateInstallStatus(projectID, "failed", 0, "", fmt.Sprintf("failed to get project: %v", err))
+		return
 	}
 	
 	fmt.Printf("InstallTheme: Project path: %s\n", project.Path)
@@ -858,8 +930,11 @@ func (s *ThemeService) InstallTheme(projectID string, themePath string) error {
 	// Check if Hugo is installed
 	if !s.hugoService.IsInstalled() {
 		fmt.Printf("InstallTheme: Hugo is not installed\n")
-		return fmt.Errorf("Hugo is not installed")
+		s.updateInstallStatus(projectID, "failed", 0, "", "Hugo is not installed")
+		return
 	}
+	
+	s.updateInstallStatus(projectID, "installing", 20, "Checking Hugo module setup...", "")
 	
 	// Check if go.mod exists, if not initialize Hugo module
 	goModPath := filepath.Join(project.Path, "go.mod")
@@ -885,37 +960,110 @@ func (s *ThemeService) InstallTheme(projectID string, themePath string) error {
 		if initErr != nil {
 			if initCtx.Err() == context.DeadlineExceeded {
 				fmt.Printf("InstallTheme: Init command timed out after 10 seconds\n")
-				return fmt.Errorf("initializing Hugo module timed out - this should only take a few seconds")
+				s.updateInstallStatus(projectID, "failed", 0, "", "initializing Hugo module timed out - this should only take a few seconds")
+				return
 			}
 			fmt.Printf("InstallTheme: Failed to initialize module: %v\n", initErr)
 			fmt.Printf("InstallTheme: Init command output: %s\n", string(initOutput))
-			return fmt.Errorf("failed to initialize Hugo module: %v\n%s", initErr, string(initOutput))
+			s.updateInstallStatus(projectID, "failed", 0, "", fmt.Sprintf("failed to initialize Hugo module: %v\n%s", initErr, string(initOutput)))
+			return
 		}
 		fmt.Printf("InstallTheme: Module initialized successfully. Output: %s\n", string(initOutput))
 	} else {
 		fmt.Printf("InstallTheme: go.mod already exists\n")
 	}
 	
+	s.updateInstallStatus(projectID, "installing", 40, "Installing theme via Hugo Modules...", "")
 	fmt.Printf("InstallTheme: Running 'hugo mod get %s' in directory: %s\n", themePath, project.Path)
 	
 	// Add timeout for mod get command (2 minutes should be plenty for downloading)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	
-	// Run: hugo mod get <themePath>
-	cmd := exec.CommandContext(ctx, "hugo", "mod", "get", themePath)
-	cmd.Dir = project.Path
+	// Try with @latest first, then fallback to without version
+	var cmd *exec.Cmd
+	var output []byte
+	var cmdErr error
 	
-	output, err := cmd.CombinedOutput()
-	if err != nil {
+	// First attempt: try with @latest
+	if !strings.Contains(themePath, "@") {
+		fmt.Printf("InstallTheme: Trying with @latest suffix\n")
+		cmd = exec.CommandContext(ctx, "hugo", "mod", "get", themePath+"@latest")
+		cmd.Dir = project.Path
+		output, cmdErr = cmd.CombinedOutput()
+	}
+	
+	// If first attempt failed or no version was specified, try without version
+	if cmdErr != nil || strings.Contains(themePath, "@") {
+		if cmdErr != nil {
+			fmt.Printf("InstallTheme: @latest failed, trying without version: %v\n", cmdErr)
+		}
+		cmd = exec.CommandContext(ctx, "hugo", "mod", "get", strings.TrimSuffix(themePath, "@latest"))
+		cmd.Dir = project.Path
+		output, cmdErr = cmd.CombinedOutput()
+	}
+	
+	if cmdErr != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			fmt.Printf("InstallTheme: Command timed out after 2 minutes\n")
-			return fmt.Errorf("installation timed out after 2 minutes - this may indicate a network issue")
+			s.updateInstallStatus(projectID, "failed", 0, "", "installation timed out after 2 minutes - this may indicate a network issue")
+			return
 		}
-		fmt.Printf("InstallTheme: Command failed with error: %v\n", err)
+		fmt.Printf("InstallTheme: Command failed with error: %v\n", cmdErr)
 		fmt.Printf("InstallTheme: Command output: %s\n", string(output))
-		return fmt.Errorf("failed to install theme: %v\n%s", err, string(output))
+		
+		// Check if this is a "no matching versions" error - try Git Submodule fallback
+		errorMsg := string(output)
+		if strings.Contains(errorMsg, "no matching versions") || strings.Contains(errorMsg, "invalid version") {
+			fmt.Printf("InstallTheme: Hugo Modules failed, attempting Git Submodule fallback\n")
+			s.updateInstallStatus(projectID, "installing", 50, "Falling back to Git Submodule...", "")
+			
+			// Convert github.com/user/repo to https://github.com/user/repo.git
+			var repoURL string
+			if strings.HasPrefix(themePath, "github.com/") {
+				// Keep the full path: github.com/user/repo
+				cleanPath := themePath
+				// Remove any version suffix like @v1.0.0 or @latest
+				if idx := strings.Index(cleanPath, "@"); idx != -1 {
+					cleanPath = cleanPath[:idx]
+				}
+				// Build the full GitHub URL
+				repoURL = "https://" + cleanPath
+				if !strings.HasSuffix(repoURL, ".git") {
+					repoURL += ".git"
+				}
+			} else {
+				s.updateInstallStatus(projectID, "failed", 0, "", "theme repository doesn't support Go modules. Please provide a GitHub URL for Git Submodule installation")
+				return
+			}
+			
+			// Extract theme name from path (just the repo name)
+			themeName := filepath.Base(strings.TrimSuffix(themePath, ".git"))
+			// Remove version suffix from theme name
+			if idx := strings.Index(themeName, "@"); idx != -1 {
+				themeName = themeName[:idx]
+			}
+			
+			fmt.Printf("InstallTheme: Falling back to Git Submodule with URL: %s, name: %s\n", repoURL, themeName)
+			
+			// Try installing via Git Submodule
+			submoduleErr := s.executeInstallThemeSubmodule(projectID, repoURL, themeName)
+			if submoduleErr != nil {
+				fmt.Printf("InstallTheme: Git Submodule fallback also failed: %v\n", submoduleErr)
+				s.updateInstallStatus(projectID, "failed", 0, "", fmt.Sprintf("Hugo Modules failed and Git Submodule fallback also failed: %v", submoduleErr))
+				return
+			}
+			
+			fmt.Printf("InstallTheme: Successfully installed via Git Submodule fallback\n")
+			s.updateInstallStatus(projectID, "success", 100, "Theme installed successfully via Git Submodule", "")
+			return
+		}
+		
+		s.updateInstallStatus(projectID, "failed", 0, "", fmt.Sprintf("failed to install theme: %v\n%s", cmdErr, string(output)))
+		return
 	}
+	
+	s.updateInstallStatus(projectID, "installing", 70, "Updating project configuration...", "")
 	
 	fmt.Printf("InstallTheme: Command succeeded. Output: %s\n", string(output))
 	
@@ -976,7 +1124,38 @@ func (s *ThemeService) InstallTheme(projectID string, themePath string) error {
 	}
 	
 	fmt.Printf("InstallTheme: Installation completed successfully\n")
-	return nil
+	s.updateInstallStatus(projectID, "success", 100, "Theme installed successfully", "")
+}
+
+// executeInstallThemeSubmodule performs the actual Git submodule installation (internal, returns error)
+func (s *ThemeService) executeInstallThemeSubmodule(projectID string, themeURL string, themeName string) error {
+	return s.InstallThemeSubmodule(projectID, themeURL, themeName)
+}
+
+// GetInstallStatus returns the current installation status for a project
+func (s *ThemeService) GetInstallStatus(projectID string) (*ThemeInstallStatus, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	
+	status, exists := s.installStatus[projectID]
+	if !exists {
+		return nil, fmt.Errorf("no installation status found for project")
+	}
+	
+	// Return a copy to avoid race conditions
+	statusCopy := &ThemeInstallStatus{
+		ThemeID:   status.ThemeID,
+		ThemeName: status.ThemeName,
+		ProjectID: status.ProjectID,
+		Status:    status.Status,
+		Progress:  status.Progress,
+		Message:   status.Message,
+		Error:     status.Error,
+		StartTime: status.StartTime,
+		EndTime:   status.EndTime,
+	}
+	
+	return statusCopy, nil
 }
 
 // InstallThemeSubmodule installs a theme via Git submodule (legacy)

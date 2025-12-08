@@ -3,6 +3,7 @@ package services
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sync"
 	"time"
@@ -120,6 +121,12 @@ func (s *ProjectService) CreateNewProject(name, parentPath string) (*models.Proj
 			"Invalid project path",
 			err.Error(),
 		)
+	}
+
+	// Set up quick-start site with Ananke theme and sample content
+	if err := s.setupQuickStartSite(absPath); err != nil {
+		// Log error but don't fail - user can still use the site
+		fmt.Printf("Warning: Failed to set up quick-start site: %v\n", err)
 	}
 
 	// Create project from the newly created path
@@ -498,5 +505,82 @@ func (s *ProjectService) saveProject(project *models.Project) error {
 // SaveProject saves a project to storage (public method)
 func (s *ProjectService) SaveProject(project *models.Project) error {
 	return s.storage.SaveProject(project)
+}
+
+// setupQuickStartSite sets up a new Hugo site with the Ananke theme and sample content
+// following the Hugo quick-start guide: https://gohugo.io/getting-started/quick-start/
+func (s *ProjectService) setupQuickStartSite(projectPath string) error {
+	// Initialize git repository
+	gitInitCmd := exec.Command("git", "init")
+	gitInitCmd.Dir = projectPath
+	if err := gitInitCmd.Run(); err != nil {
+		return fmt.Errorf("failed to initialize git: %w", err)
+	}
+
+	// Add Ananke theme as git submodule
+	themesDir := filepath.Join(projectPath, "themes")
+	if err := os.MkdirAll(themesDir, 0755); err != nil {
+		return fmt.Errorf("failed to create themes directory: %w", err)
+	}
+
+	gitSubmoduleCmd := exec.Command("git", "submodule", "add",
+		"https://github.com/theNewDynamic/gohugo-theme-ananke.git",
+		"themes/ananke")
+	gitSubmoduleCmd.Dir = projectPath
+	if err := gitSubmoduleCmd.Run(); err != nil {
+		return fmt.Errorf("failed to add Ananke theme: %w", err)
+	}
+
+	// Update config file to use Ananke theme
+	configPath := filepath.Join(projectPath, "hugo.toml")
+	configContent, err := os.ReadFile(configPath)
+	if err != nil {
+		return fmt.Errorf("failed to read config file: %w", err)
+	}
+
+	// Append theme configuration
+	newConfig := string(configContent) + "\ntheme = 'ananke'\n"
+	if err := os.WriteFile(configPath, []byte(newConfig), 0644); err != nil {
+		return fmt.Errorf("failed to update config file: %w", err)
+	}
+
+	// Create sample content
+	contentDir := filepath.Join(projectPath, "content", "posts")
+	if err := os.MkdirAll(contentDir, 0755); err != nil {
+		return fmt.Errorf("failed to create content directory: %w", err)
+	}
+
+	// Create first post
+	samplePost := `+++
+title = 'My First Post'
+date = ` + time.Now().Format("2006-01-02T15:04:05-07:00") + `
+draft = false
++++
+
+## Introduction
+
+This is **bold** text, and this is *emphasized* text.
+
+Visit the [Hugo](https://gohugo.io) website!
+
+## Getting Started
+
+Welcome to your new Hugo site! This is a sample post created by Hugo Manager.
+
+You can:
+- Edit this post in the Content tab
+- Create new posts
+- Customize your site configuration
+- Install additional themes
+
+Happy blogging!
+`
+
+	postPath := filepath.Join(contentDir, "my-first-post.md")
+	if err := os.WriteFile(postPath, []byte(samplePost), 0644); err != nil {
+		return fmt.Errorf("failed to create sample post: %w", err)
+	}
+
+	return nil
 }
 

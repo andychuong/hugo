@@ -5,7 +5,8 @@ import {
   UpdateThemeIndex,
   InstallTheme,
   InstallThemeSubmodule,
-  GetThemeFromMarketplace
+  GetThemeFromMarketplace,
+  GetThemeInstallStatus
 } from '../../../wailsjs/go/handlers/App';
 import { BrowserOpenURL } from '../../../wailsjs/runtime/runtime';
 import { models } from '../../../wailsjs/go/models';
@@ -98,10 +99,41 @@ export default function ThemeBrowser({ project, onThemeInstalled }: ThemeBrowser
           throw new Error('Theme path is required');
         }
         console.log('Installing theme via module:', { projectId: project.id, themePath });
-        toast.info(`Installing ${selectedTheme.name} via Hugo Modules...`);
+        toast.info(`Installing ${selectedTheme.name}...`);
+        
+        // Start installation (now runs in background)
         await InstallTheme(project.id, themePath);
-        console.log('Theme installed successfully');
-        toast.success(`Theme ${selectedTheme.name} installed successfully`);
+        
+        // Poll for status
+        const pollStatus = async () => {
+          try {
+            const status = await GetThemeInstallStatus(project.id);
+            console.log('Install status:', status);
+            
+            if (status.Status === 'installing') {
+              toast.info(`${status.Message} (${status.Progress}%)`);
+              setTimeout(pollStatus, 1000); // Poll every second
+            } else if (status.Status === 'success') {
+              console.log('Theme installed successfully');
+              toast.success(`Theme ${selectedTheme.name} installed successfully`);
+              setShowInstallDialog(false);
+              setSelectedTheme(null);
+              setInstallPath('');
+              setInstalling(null);
+              onThemeInstalled?.();
+            } else if (status.Status === 'failed') {
+              throw new Error(status.Error || 'Installation failed');
+            }
+          } catch (err: any) {
+            // If status check fails, assume installation is complete or failed
+            console.error('Status check error:', err);
+            throw err;
+          }
+        };
+        
+        // Start polling
+        setTimeout(pollStatus, 500);
+        return; // Don't proceed to cleanup yet
       } else {
         const themeURL = installPath.trim() || selectedTheme.githubPath;
         if (!themeURL) {
@@ -113,11 +145,11 @@ export default function ThemeBrowser({ project, onThemeInstalled }: ThemeBrowser
         await InstallThemeSubmodule(project.id, themeURL, themeName);
         console.log('Theme installed successfully');
         toast.success(`Theme ${selectedTheme.name} installed successfully`);
+        setShowInstallDialog(false);
+        setSelectedTheme(null);
+        setInstallPath('');
+        onThemeInstalled?.();
       }
-      setShowInstallDialog(false);
-      setSelectedTheme(null);
-      setInstallPath('');
-      onThemeInstalled?.();
     } catch (err: any) {
       console.error('Theme installation error:', err);
       console.error('Error details:', {

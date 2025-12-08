@@ -238,6 +238,10 @@ export function GetThemeIndex() {
   return window['go']['handlers']['App']['GetThemeIndex']();
 }
 
+export function GetThemeInstallStatus(arg1) {
+  return window['go']['handlers']['App']['GetThemeInstallStatus'](arg1);
+}
+
 export function GetThemeMetadata(arg1) {
   return window['go']['handlers']['App']['GetThemeMetadata'](arg1);
 }

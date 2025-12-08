@@ -7,9 +7,11 @@ type Project = models.Project;
 interface ProjectCardProps {
   project: Project;
   onClick?: () => void;
+  onContextMenu?: (e: React.MouseEvent) => void;
+  onMenuClick?: (e: React.MouseEvent) => void;
 }
 
-export default function ProjectCard({ project, onClick }: ProjectCardProps) {
+export default function ProjectCard({ project, onClick, onContextMenu, onMenuClick }: ProjectCardProps) {
   const getStatusBadge = () => {
     if (!project.status) return null;
     if (project.status.hasErrors) return <Badge variant="error">Error</Badge>;
@@ -29,7 +31,31 @@ export default function ProjectCard({ project, onClick }: ProjectCardProps) {
   };
 
   return (
-    <Card hover onClick={onClick} className="cursor-pointer h-full flex flex-col">
+    <div 
+      onContextMenu={onContextMenu}
+      className="h-full group"
+    >
+      <Card 
+        hover 
+        onClick={onClick} 
+        className="cursor-pointer h-full flex flex-col relative"
+      >
+        {/* Menu Button */}
+        {onMenuClick && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onMenuClick(e);
+            }}
+            className="absolute top-2 right-2 z-10 p-1.5 rounded-md bg-hugo-bg-secondary/80 hover:bg-hugo-bg-secondary opacity-0 group-hover:opacity-100 transition-opacity"
+            title="More options"
+          >
+            <svg className="w-4 h-4 text-hugo-text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+            </svg>
+          </button>
+        )}
+      
       <div className="flex items-start justify-between mb-3">
         <div className="flex-1 min-w-0 pr-2">
           <h3 className="text-lg font-semibold mb-1 text-hugo-text-primary truncate">
@@ -72,7 +98,8 @@ export default function ProjectCard({ project, onClick }: ProjectCardProps) {
           {project.status.errorMessage}
         </div>
       )}
-    </Card>
+      </Card>
+    </div>
   );
 }
 
